@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>Certificate Verification</h1>
+                <p class="text-muted">Upload your certificate to verify its authenticity.</p>
+            </div>
+            <div style="text-align: right;">
+                {% if current_user.is_authenticated %}
+                <div class="user-info">
+                    <strong>{{ current_user.full_name }}</strong> <br>
+                    <small>Department: {{ current_user.department or 'N/A' }}</small>
+                </div>
+                <div style="margin-top: 0.5rem;">
+                    <a href="{{ url_for('student_portfolio') }}" class="btn btn-outline-info btn-sm"
+                        style="margin-right: 0.5rem;">My Portfolio</a>
+                    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-danger">Logout</a>
+                </div>
+                {% else %}
+                <a href="{{ url_for('login') }}" class="btn btn-primary">Login</a>
+                {% endif %}
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-info">
+            {% for message in messages %}
+            <div>{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Upload Section -->
+        {% if current_user.is_authenticated and current_user.role == 'student' %}
+        <div class="card">
+            <div class="card-header">Record New Activity</div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data"
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <!-- Row 1 -->
+                    <div class="form-group">
+                        <label for="roll_number">Roll Number</label>
+                        <input type="text" name="roll_number" id="roll_number" class="form-control" required {% if
+                            user_roll_no %}value="{{ user_roll_no }}" readonly{% endif %}>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Activity Type</label>
+                        <select name="activity_type_id" id="activity_type_select" class="form-control" required
+                            onchange="toggleCustomCategory()">
+                            <option value="" disabled selected>Select activity...</option>
+                            {% for ac in activity_types %}
+                            <option value="{{ ac.id }}">{{ ac.name }}</option>
+                            {% endfor %}
+                            <option value="other">Other / Not listed</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="custom_category_group" style="display: none;">
+                        <label>Custom Activity Category <small>(Required for 'Other')</small></label>
+                        <input type="text" name="custom_category" id="custom_category" class="form-control"
+                            placeholder="e.g. Volunteer Work">
+                    </div>
+
+                    <script>
+                        function toggleCustomCategory() {
+                            var select = document.getElementById('activity_type_select');
+                            var customGroup = document.getElementById('custom_category_group');
+                            var customInput = document.getElementById('custom_category');
+
+                            if (select.value === 'other') {
+                                customGroup.style.display = 'block';
+                                customInput.required = true;
+                            } else {
+                                customGroup.style.display = 'none';
+                                customInput.required = false;
+                                customInput.value = '';
+                            }
+                        }
+                    </script>
+
+                    <!-- Row 2 -->
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Activity Title</label>
+                        <input type="text" name="title" class="form-control"
+                            placeholder="e.g. 1st Place in Robotics Hackathon" required>
+                    </div>
+
+                    <!-- Row 3 -->
+                    <div class="form-group">
+                        <label>Issuer Name <small>(Optional)</small></label>
+                        <input type="text" name="issuer_name" class="form-control" placeholder="e.g. IEEE / Coursera">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Certificate File</label>
+                        <input type="file" name="file" id="file" class="form-control" accept=".pdf, .png, .jpg, .jpeg"
+                            required>
+                    </div>
+
+                    <!-- Row 4 -->
+                    <div class="form-group">
+                        <label>Start Date <small>(Optional)</small></label>
+                        <input type="date" name="start_date" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label>End Date <small>(Optional)</small></label>
+                        <input type="date" name="end_date" class="form-control">
+                    </div>
+
+                    <!-- Submit -->
+                    <div style="grid-column: span 2;">
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Upload & Verify</button>
+                        <p class="text-muted" style="text-align: center; margin-top: 0.5rem; font-size: 0.9em;">
+                            The system will attempt to auto-verify your certificate. If unresolved, it will be sent to
+                            the responsible faculty.
+                        </p>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+</body>
+
+</html>

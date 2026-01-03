@@ -1,0 +1,10 @@
+flask
+flask-sqlalchemy
+flask-login
+psycopg2-binary
+requests
+PyPDF2
+werkzeug
+xhtml2pdf
+opencv-python
+Pillow

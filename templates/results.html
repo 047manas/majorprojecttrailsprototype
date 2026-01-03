@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><title>Verification Results</title></head>
+<body>
+    <h2>Certificate Verification Results</h2>
+    <p><strong>Roll Number:</strong> {{ roll_number }}</p>
+    <p><strong>File Name:</strong> {{ filename or 'None' }}</p>
+    <h3>Certificate Text Used:</h3>
+    <pre>{{ cert_text }}</pre>
+    <h3>URLs Found:</h3>
+    <ul>
+        {% for url in urls %}
+            <li>{{ url }}</li>
+        {% endfor %}
+    </ul>
+    <h3>ID Candidates Found:</h3>
+    <ul>
+        {% for id in id_candidates %}
+            <li>{{ id }}</li>
+        {% endfor %}
+    </ul>
+    <h3>Result:</h3>
+    <p style="color: green; font-weight: bold;">{{ result_message }}</p>
+    <a href="/">Back to Upload Form</a>
+</body>
+</html>

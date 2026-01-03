@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>Faculty Dashboard</h1>
+                <p class="text-muted">Review pending verification requests assigned to you.</p>
+            </div>
+            <div style="text-align: right;">
+                <div class="user-info">
+                    Logged in as: <strong>{{ current_user.full_name }}</strong> <br>
+                    ({{ current_user.department or 'N/A' }} | ID: {{ current_user.institution_id or 'N/A' }})
+                </div>
+                <div style="margin-top: 0.5rem;">
+                    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-danger">Logout</a>
+                </div>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-success">
+            {% for message in messages %}
+            <div>{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <h2>Verification Queue</h2>
+
+        {% if pending_requests %}
+        {% for req in pending_requests %}
+        <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Activity #{{ req.id }} <small class="text-muted">({{ req.student.institution_id }} | {{
+                        req.student.full_name }})</small></span>
+                <div>
+                    {% if req.activity_type %}
+                    <span class="badge bg-secondary">{{ req.activity_type.name }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ req.custom_category }} (Other)</span>
+                    {% endif %}
+                    <span class="badge bg-warning">Pending</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+
+                    <!-- File & Text Info -->
+                    <div>
+                        <div class="form-group">
+                            <label>Activity Details</label>
+                            <div><strong>Title:</strong> {{ req.title }}</div>
+                            <div><strong>Issuer:</strong> {{ req.issuer_name or 'N/A' }}</div>
+                            <div><strong>Date:</strong> {{ req.start_date }} - {{ req.end_date }}</div>
+                            <div class="text-muted mt-2 small">
+                                <strong>In-Charge:</strong>
+                                {% if req.activity_type %}
+                                {{ req.activity_type.faculty_incharge.full_name or 'Unassigned' }}
+                                {% else %}
+                                <span class="text-muted">General / Other</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>File</label>
+                            <div>
+                                {{ req.certificate_file }}
+                                <a href="{{ url_for('serve_upload', filename=req.certificate_file) }}" target="_blank"
+                                    class="btn btn-sm btn-outline-primary" style="margin-left: 0.5rem;">View
+                                    Certificate</a>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Auto-Decision</label>
+                            <div class="alert alert-danger" style="margin-bottom: 0;">{{ req.auto_decision }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Detected Data -->
+                    <div>
+                        <label>Detected Links & IDs</label>
+                        <p class="text-muted">Extracted data from JSON:</p>
+                        <div style="max-height: 150px; overflow-y: auto; background: #f8f9fa; padding: 0.5rem;">
+                            <strong>URLs:</strong> {{ req.urls_json }} <br><br>
+                            <strong>IDs:</strong> {{ req.ids_json }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top: 1.5rem; border-top: 1px solid #dee2e6; padding-top: 1.5rem;">
+                    <div style="display: flex; gap: 1rem;">
+                        <form action="{{ url_for('approve_request', act_id=req.id) }}" method="post" style="flex: 1;">
+                            <textarea name="faculty_comment" class="form-control" rows="2"
+                                placeholder="Approval Application comments..."
+                                style="margin-bottom: 0.5rem;"></textarea>
+                            <button type="submit" class="btn btn-success" style="width: 100%;">Approve
+                                (Genuine)</button>
+                        </form>
+
+                        <form action="{{ url_for('reject_request', act_id=req.id) }}" method="post" style="flex: 1;">
+                            <textarea name="faculty_comment" class="form-control" rows="2"
+                                placeholder="Rejection Reason..." style="margin-bottom: 0.5rem;"></textarea>
+                            <button type="submit" class="btn btn-danger" style="width: 100%;">Reject
+                                (Suspicious)</button>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="card">
+            <div class="card-body" style="text-align: center; color: #6c757d;">
+                <em>No pending requests for you.</em>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+</body>
+
+</html>
