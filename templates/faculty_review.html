@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Review - Certificate Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-light">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="navbar-brand">📋 Faculty Dashboard</div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header with Back Link -->
+        <header>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="{{ url_for('faculty_dashboard') }}" class="btn btn-sm btn-outline-secondary mb-2">← Back to Queue</a>
+                    <h1>Certificate Review</h1>
+                    <p class="text-muted">Activity #{{ activity.id }} | Student: {{ activity.student.full_name }}</p>
+                </div>
+                <div class="header-user-section">
+                    <div class="user-info">
+                        <strong>{{ current_user.full_name }}</strong> <br>
+                        <small>{{ current_user.department or 'N/A' }} | ID: {{ current_user.institution_id or 'N/A' }}</small>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-success">
+            {% for message in messages %}
+            <div>{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Certificate Details Card -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>Activity Details</strong>
+                    <small class="text-muted ms-2">({{ activity.student.institution_id }} | {{ activity.student.full_name }})</small>
+                </div>
+                <div class="d-flex gap-1">
+                    {% if activity.activity_type %}
+                    <span class="badge bg-secondary">{{ activity.activity_type.name }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ activity.custom_category }}</span>
+                    {% endif %}
+                    <span class="badge bg-warning">Pending Review</span>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <div class="grid-2">
+                    <!-- Left Column: Activity Details -->
+                    <div>
+                        <div class="form-group">
+                            <label style="font-size: 0.95rem; font-weight: 600; color: var(--text-dark);">Activity Information</label>
+                            <div style="line-height: 1.8;">
+                                <div><strong>Title:</strong> {{ activity.title }}</div>
+                                <div><strong>Issuer:</strong> {{ activity.issuer_name or 'N/A' }}</div>
+                                <div><strong>Duration:</strong> {{ activity.start_date }} to {{ activity.end_date }}</div>
+                                <div style="margin-top: var(--spacing-md);">
+                                    <strong>Faculty In-Charge:</strong><br>
+                                    {% if activity.activity_type and activity.activity_type.faculty_incharge %}
+                                    {{ activity.activity_type.faculty_incharge.full_name }}
+                                    {% else %}
+                                    <span class="text-muted">General / Unassigned</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mt-4">
+                            <label style="font-size: 0.95rem; font-weight: 600; color: var(--text-dark);">Certificate File</label>
+                            <div>
+                                <small class="text-muted d-block mb-2">{{ activity.certificate_file }}</small>
+                                <a href="{{ url_for('serve_upload', filename=activity.certificate_file) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    📄 View Certificate PDF
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="form-group mt-4">
+                            <label style="font-size: 0.95rem; font-weight: 600; color: var(--text-dark);">System Decision</label>
+                            <div class="alert alert-warning" style="margin-bottom: 0;">
+                                <strong>Auto-Analysis Result:</strong> {{ activity.auto_decision }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Extracted Data -->
+                    <div>
+                        <label style="font-size: 0.95rem; font-weight: 600; color: var(--text-dark);">Detected Links & IDs</label>
+                        <p class="text-muted" style="margin-bottom: var(--spacing-md);">Extracted from certificate analysis:</p>
+                        <div style="max-height: 300px; overflow-y: auto; background: var(--border-light); padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: 0.375rem; font-family: var(--font-mono); font-size: 0.85rem;">
+                            <div><strong>URLs Found:</strong></div>
+                            <div style="word-break: break-all; color: var(--text-gray); margin-bottom: var(--spacing-md);">{{ activity.urls_json }}</div>
+                            <div><strong>IDs Found:</strong></div>
+                            <div style="word-break: break-all; color: var(--text-gray);">{{ activity.ids_json }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Approval/Rejection Actions -->
+        <div class="card">
+            <div class="card-header">
+                <strong>Your Decision</strong>
+            </div>
+            <div class="card-body">
+                <div class="grid-2">
+                    <!-- Approve Form -->
+                    <form action="{{ url_for('approve_request', act_id=activity.id) }}" method="post">
+                        <div class="form-group">
+                            <label for="faculty_comment_approve">
+                                <strong>Approval Comments</strong>
+                                <small class="text-muted">(Optional)</small>
+                            </label>
+                            <textarea 
+                                name="faculty_comment" 
+                                id="faculty_comment_approve" 
+                                class="form-control" 
+                                rows="4" 
+                                placeholder="Add any notes about this approval. For example: Verified against official records, genuine certificate, etc.">
+                            </textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100" style="padding: var(--spacing-md); font-weight: 600;">
+                            ✓ Approve (Genuine Certificate)
+                        </button>
+                    </form>
+
+                    <!-- Reject Form -->
+                    <form action="{{ url_for('reject_request', act_id=activity.id) }}" method="post">
+                        <div class="form-group">
+                            <label for="faculty_comment_reject">
+                                <strong>Rejection Reason</strong>
+                                <small class="text-muted">(Optional)</small>
+                            </label>
+                            <textarea 
+                                name="faculty_comment" 
+                                id="faculty_comment_reject" 
+                                class="form-control" 
+                                rows="4" 
+                                placeholder="Please explain why you're rejecting this certificate. For example: Unverifiable issuer, suspicious content, incomplete information, etc.">
+                            </textarea>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100" style="padding: var(--spacing-md); font-weight: 600;">
+                            ✗ Reject (Suspicious/Invalid)
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Back Link -->
+        <div style="margin-top: var(--spacing-xl); text-align: center;">
+            <a href="{{ url_for('faculty_dashboard') }}" class="text-muted">← Back to Verification Queue</a>
+        </div>
+    </div>
+</body>
+
+</html>
