@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - NAAC Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <div>
+                <h1>NAAC Dashboard (Criterion 1 & 5)</h1>
+                <p class="text-muted">Analytics for Administrative Audit and Accreditation.</p>
+            </div>
+            <div>
+                <a href="{{ url_for('main.admin_users') }}" class="btn btn-outline-primary"
+                    style="margin-right: 0.5rem;">Manage Users</a>
+                <a href="{{ url_for('main.admin_activity_types') }}" class="btn btn-outline-primary"
+                    style="margin-right: 0.5rem;">Manage Activity Types</a>
+                <a href="{{ url_for('main.logout') }}" class="btn btn-danger">Logout</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-success">
+            {% for message in messages %}
+            <div>{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Filters (compact) -->
+        <div class="card mb-4 filters-card">
+            <div class="card-body">
+                <form method="get" class="row g-2 filters-form">
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label>Department</label>
+                        <input type="text" name="department" class="form-control" placeholder="e.g. CSE"
+                            value="{{ request.args.get('department', '') }}">
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label>Start Date</label>
+                        <input type="date" name="start_date" class="form-control"
+                            value="{{ request.args.get('start_date', '') }}">
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label>End Date</label>
+                        <input type="date" name="end_date" class="form-control"
+                            value="{{ request.args.get('end_date', '') }}">
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3 d-flex align-items-end justify-content-lg-end">
+                        <button type="submit" class="btn btn-primary filters-apply">Apply Filters</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Core Metrics Row (compact grid) -->
+        <div class="kpi-grid mb-4">
+            <div class="card kpi-card kpi-primary">
+                <div class="card-body">
+                    <h6 class="card-title">Total Activities</h6>
+                    <h3 class="kpi-value">{{ total_activities }}</h3>
+                    <p class="kpi-caption">&nbsp;</p>
+                </div>
+            </div>
+
+            <div class="card kpi-card kpi-success">
+                <div class="card-body">
+                    <h6 class="card-title">Verified Portfolio</h6>
+                    <h3 class="kpi-value">{{ verified_percentage }}%</h3>
+                    <p class="kpi-caption">{{ verified_count }} / {{ total_activities }}</p>
+                </div>
+            </div>
+
+            <div class="card kpi-card kpi-info">
+                <div class="card-body">
+                    <h6 class="card-title">Student Participation</h6>
+                    <h3 class="kpi-value">{{ participation_percentage }}%</h3>
+                    <p class="kpi-caption">{{ participating_students }} / {{ total_students }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-lg-6">
+                <div class="card chart-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Activities by Type (Stacked Status)</span>
+                        <a href="{{ url_for('main.admin_export_naac', type='activities_by_type', department=request.args.get('department'), start_date=request.args.get('start_date'), end_date=request.args.get('end_date')) }}"
+                            class="btn btn-sm btn-outline-secondary">Export CSV</a>
+                    </div>
+                    <div class="card-body chart-container">
+                        <canvas id="typeChart" data-labels='{{ type_labels | tojson }}'
+                            data-pending='{{ data_pending | tojson }}' data-auto='{{ data_auto | tojson }}'
+                            data-faculty='{{ data_faculty | tojson }}' data-rejected='{{ data_rejected | tojson }}'>
+                        </canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card chart-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Overall Verification</span>
+                        <a href="#" class="btn btn-sm btn-outline-secondary disabled">Export Img</a>
+                    </div>
+                    <div class="card-body chart-container">
+                        <canvas id="statusChart" data-verified="{{ verified_count }}"
+                            data-total="{{ total_activities }}">
+                        </canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Sections -->
+        <div class="row">
+            <!-- MOOC/Certificate Details -->
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Certificate / Value Added / MOOC Courses (Criterion 1.2)</span>
+                        <a href="{{ url_for('main.admin_export_naac', type='mooc_details', department=request.args.get('department'), start_date=request.args.get('start_date'), end_date=request.args.get('end_date')) }}"
+                            class="btn btn-sm btn-outline-secondary">Export CSV</a>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>{{ mooc_count }}</strong> activities identified as MOOCs or Certificate Courses.</p>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Activity Type / Category</th>
+                                        <th>Total</th>
+                                        <th>Verified</th>
+                                        <th>Pending</th>
+                                        <th>Rejected</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in type_stats %}
+                                    <tr>
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.total }}</td>
+                                        <td>{{ row.faculty_verified + row.auto_verified }}</td>
+                                        <td>{{ row.pending }}</td>
+                                        <td>{{ row.rejected }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // 1. Stacked Bar Chart for Activity Types
+            const typeCanvas = document.getElementById('typeChart');
+            const typeLabels = JSON.parse(typeCanvas.dataset.labels);
+            const dataPending = JSON.parse(typeCanvas.dataset.pending);
+            const dataAuto = JSON.parse(typeCanvas.dataset.auto);
+            const dataFaculty = JSON.parse(typeCanvas.dataset.faculty);
+            const dataRejected = JSON.parse(typeCanvas.dataset.rejected);
+
+            new Chart(typeCanvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: typeLabels,
+                    datasets: [
+                        { label: 'Pending', data: dataPending, backgroundColor: '#ffc107' }, // Warning
+                        { label: 'Auto Verified', data: dataAuto, backgroundColor: '#20c997' }, // Teal
+                        { label: 'Faculty Verified', data: dataFaculty, backgroundColor: '#198754' }, // Success
+                        { label: 'Rejected', data: dataRejected, backgroundColor: '#dc3545' } // Danger
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+
+            // 2. Pie Chart for Verification
+            const statusCanvas = document.getElementById('statusChart');
+            const verifiedCount = parseInt(statusCanvas.dataset.verified);
+            const totalActivities = parseInt(statusCanvas.dataset.total);
+            // Handle case where total is 0 to avoid negative pending
+            const pendingCount = Math.max(0, totalActivities - verifiedCount);
+
+            new Chart(statusCanvas.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Verified', 'Pending/Other'],
+                    datasets: [{
+                        data: [verifiedCount, pendingCount],
+                        backgroundColor: ['#198754', '#e9ecef']
+                    }]
+                },
+                options: {
+                    responsive: true
+                }
+            });
+        });
+    </script>
+
+</body>
+
+</html>

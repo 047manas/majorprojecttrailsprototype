@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - User Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        function toggleFields() {
+            const role = document.getElementById('role').value;
+            const extraFields = document.getElementById('extra-fields');
+            const instIdLabel = document.getElementById('inst-id-label');
+            const deptInput = document.getElementById('department');
+            const instIdInput = document.getElementById('institution_id');
+
+            const positionField = document.getElementById('position-field');
+
+            if (role === 'admin') {
+                extraFields.style.display = 'contents';
+                positionField.style.display = 'none';
+                deptInput.required = false;
+                instIdInput.required = false;
+                instIdLabel.innerText = "Institution ID (Optional)";
+            } else if (role === 'faculty') {
+                extraFields.style.display = 'contents';
+                positionField.style.display = 'block';
+                deptInput.required = true;
+                instIdInput.required = true;
+                instIdLabel.innerText = "Institution ID (Faculty ID)";
+            } else if (role === 'student') {
+                extraFields.style.display = 'contents';
+                positionField.style.display = 'none';
+                deptInput.required = true;
+                instIdInput.required = true;
+                instIdLabel.innerText = "Institution ID (Roll Number)";
+            }
+        }
+
+        window.onload = toggleFields;
+    </script>
+</head>
+
+<body>
+
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>User Management</h1>
+                <p class="text-muted">Manage system access (Admin: {{ current_user.full_name }})</p>
+            </div>
+            <div>
+                <a href="{{ url_for('main.admin_activity_types') }}" class="btn btn-outline-primary"
+                    style="margin-right: 0.5rem;">Manage Activity Types</a>
+                <a href="{{ url_for('main.admin_naac_dashboard') }}" class="btn btn-outline-primary"
+                    style="margin-right: 0.5rem;">NAAC Dashboard</a>
+                <a href="{{ url_for('main.logout') }}" class="btn btn-danger">Logout</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-success">
+            {% for message in messages %}
+            <div>{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div class="card-header">Create New User</div>
+            <div class="card-body">
+                <form action="{{ url_for('main.admin_create_user') }}" method="post"
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="full_name" class="form-control" required placeholder="e.g. John Doe">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="email" class="form-control" required
+                            placeholder="e.g. john@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select name="role" id="role" class="form-control" onchange="toggleFields()">
+                            <option value="student">Student</option>
+                            <option value="faculty">Faculty</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="position-field" style="display: none;">
+                        <label>Position (Optional)</label>
+                        <input type="text" name="position" class="form-control" placeholder="e.g. hod">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+
+                    <div id="extra-fields" style="display: contents;">
+                        <div class="form-group">
+                            <label id="inst-id-label">Institution ID</label>
+                            <input type="text" name="institution_id" id="institution_id" class="form-control"
+                                placeholder="e.g. STD001 or FAC001">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Department</label>
+                            <input type="text" name="department" id="department" class="form-control"
+                                placeholder="e.g. Computer Science">
+                        </div>
+                    </div>
+
+                    <div style="grid-column: span 2;">
+                        <button type="submit" class="btn btn-success" style="width: 100%;">Create User</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Existing Users</div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>ID</th>
+                                <th>Dept</th>
+                                <th>Active</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user.full_name }}</td>
+                                <td>{{ user.email }}</td>
+                                <td><span
+                                        class="badge {% if user.role == 'admin' %}bg-danger{% elif user.role == 'faculty' %}bg-warning{% else %}bg-secondary{% endif %}">{{
+                                        user.role }}</span></td>
+                                <td>{{ user.institution_id or '-' }}</td>
+                                <td>{{ user.department or '-' }} <small class="text-muted">{{ '(' + user.position + ')'
+                                        if
+                                        user.position else '' }}</small></td>
+                                <td>
+                                    {% if user.is_active %}<span class="badge bg-success">Yes</span>{% else %}<span
+                                        class="badge bg-danger">No</span>{% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <a href="{{ url_for('main.edit_user', user_id=user.id) }}"
+                                            class="btn btn-sm btn-outline-primary">Edit</a>
+
+                                        <form action="{{ url_for('main.admin_toggle_user', user_id=user.id) }}"
+                                            method="post" style="display:inline;">
+                                            {% if user.is_active %}
+                                            <button type="submit" class="btn btn-sm btn-outline-primary"
+                                                style="border-color: #dc3545; color: #dc3545;"
+                                                title="Deactivate">Block</button>
+                                            {% else %}
+                                            <button type="submit" class="btn btn-sm btn-outline-primary"
+                                                style="border-color: #198754; color: #198754;"
+                                                title="Activate">Unblock</button>
+                                            {% endif %}
+                                        </form>
+
+                                        <form action="{{ url_for('main.delete_user', user_id=user.id) }}" method="post"
+                                            style="display:inline;"
+                                            onsubmit="return confirm('Are you sure you want to permanently delete this user? All their data will be lost.');">
+                                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Dashboard - Verification Queue</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-light">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="navbar-brand">📋 Faculty Dashboard</div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>Faculty Dashboard</h1>
+                    <p class="text-muted">Review pending verification requests assigned to you.</p>
+                </div>
+                <div class="header-user-section">
+                    <div class="user-info">
+                        <strong>{{ current_user.full_name }}</strong> <br>
+                        <small>{{ current_user.department or 'N/A' }} | ID: {{ current_user.institution_id or 'N/A'
+                            }}</small>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-success">
+            {% for message in messages %}
+            <div>{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Verification Queue Section -->
+        <div class="mb-4">
+            <h2>Verification Queue</h2>
+            <p class="text-muted">{{ pending_requests | length }} pending certificate{{ '' if pending_requests | length
+                == 1 else 's' }} awaiting review</p>
+        </div>
+
+        {% if pending_requests %}
+        <!-- Queue Table -->
+        <div class="table-responsive">
+            <table class="queue-table">
+                <thead>
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Roll Number</th>
+                        <th>Activity / Certificate</th>
+                        <th>Uploaded Date</th>
+                        <th>Status</th>
+                        <th class="action-col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in pending_requests %}
+                    <tr class="queue-row">
+                        <td>{{ req.student.full_name }}</td>
+                        <td><code>{{ req.student.institution_id }}</code></td>
+                        <td>
+                            <div class="activity-title">{{ req.title }}</div>
+                            {% if req.activity_type %}
+                            <span class="badge-small bg-secondary">{{ req.activity_type.name }}</span>
+                            {% else %}
+                            <span class="badge-small bg-secondary">{{ req.custom_category }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="date-cell">{{ req.created_at.strftime('%b %d, %Y') if req.created_at else 'N/A' }}
+                        </td>
+                        <td>
+                            <span class="status-badge status-pending">Pending Review</span>
+                        </td>
+                        <td class="action-col">
+                            <a href="{{ url_for('main.serve_upload', filename=req.certificate_file) }}" target="_blank"
+                                class="btn btn-sm btn-primary">
+                                View File
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body" style="text-align: center; padding: var(--spacing-xl);">
+                <p class="text-muted" style="margin: 0;">✓ No pending requests at this time. All certificates have been
+                    reviewed.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+
+</html>
