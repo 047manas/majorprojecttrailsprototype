@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity In-Charge Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-light">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="navbar-brand">📋 Activity In-Charge Dashboard</div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.faculty_dashboard') }}" class="btn btn-sm btn-outline-primary">Back to
+                    Dashboard</a>
+                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Stats Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-white bg-primary">
+                    <div class="card-body">
+                        <h5 class="card-title">Students Engaged</h5>
+                        <p class="card-text display-4">{{ total_students_engaged }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-info">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Submissions</h5>
+                        <p class="card-text display-4">{{ total_submissions }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-success">
+                    <div class="card-body">
+                        <h5 class="card-title">Verified</h5>
+                        <p class="card-text display-4">{{ total_verified }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Activities Table -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">My Activities</div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Activity Type</th>
+                                        <th>Submissions</th>
+                                        <th>Unique Students</th>
+                                        <th>Verified</th>
+                                        <th>Pending</th>
+                                        <th>Rejected</th>
+                                        <th>Approval Rate</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for a in activities %}
+                                    <tr>
+                                        <td><strong>{{ a.name }}</strong></td>
+                                        <td>{{ a.total_submissions }}</td>
+                                        <td>{{ a.unique_students }}</td>
+                                        <td><span class="badge bg-success">{{ a.verified }}</span></td>
+                                        <td><span class="badge bg-warning">{{ a.pending }}</span></td>
+                                        <td><span class="badge bg-danger">{{ a.rejected }}</span></td>
+                                        <td>
+                                            <div class="progress" style="height: 20px; width: 80px;">
+                                                <div class="progress-bar bg-success" role="progressbar"
+                                                    style="width: {{ a.approval_rate }}%">
+                                                    {{ a.approval_rate }}%
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('main.faculty_dashboard') }}?activity_type={{ a.id }}"
+                                                class="btn btn-sm btn-outline-primary">
+                                                View Submissions
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted">No activity submissions found.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity Chart -->
+                <div class="card">
+                    <div class="card-header">Submissions by Activity Type</div>
+                    <div class="card-body" style="height: 300px;">
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights Sidebar -->
+            <div class="col-md-4">
+                <!-- Lowest Participation -->
+                <div class="card mb-4">
+                    <div class="card-header">⚠️ Needs Attention</div>
+                    <div class="card-body">
+                        <p class="text-muted">Activity types with lowest student engagement:</p>
+                        <ul class="list-group list-group-flush">
+                            {% for a in lowest_participation %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ a.name }}
+                                <span class="badge bg-secondary">{{ a.unique_students }} students</span>
+                            </li>
+                            {% else %}
+                            <li class="list-group-item text-muted">Insufficient data.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="card">
+                    <div class="card-header">📊 Summary</div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Total Activity Types</span>
+                            <strong>{{ activities|length }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Avg. Approval Rate</span>
+                            <strong>
+                                {% if activities %}
+                                {{ ((activities|sum(attribute='approval_rate')) / activities|length)|round(1) }}%
+                                {% else %}
+                                N/A
+                                {% endif %}
+                            </strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Pending Reviews</span>
+                            <strong class="text-warning">{{ activities|sum(attribute='pending') }}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [{% for a in activities %}"{{ a.name }}", {% endfor %}],
+            datasets: [
+            { label: 'Verified', data: [{% for a in activities %}{{ a.verified }}, {% endfor %}], backgroundColor: '#1cc88a' },
+            { label: 'Pending', data: [{% for a in activities %}{{ a.pending }}, {% endfor %}], backgroundColor: '#f6c23e' },
+            { label: 'Rejected', data: [{% for a in activities %}{{ a.rejected }}, {% endfor %}], backgroundColor: '#e74a3b' }
+                ]
+            },
+            options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+        }
+        });
+    </script>
+</body>
+
+</html>

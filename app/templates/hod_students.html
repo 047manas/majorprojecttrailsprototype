@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department Students - {{ current_user.department }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-light">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="navbar-brand">👥 Department Students: {{ current_user.department }}</div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.hod_stats') }}" class="btn btn-sm btn-outline-primary">Back to Stats</a>
+                <a href="{{ url_for('main.faculty_dashboard') }}" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Stats Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-white bg-primary">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Students</h5>
+                        <p class="card-text display-4">{{ total_students }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-success">
+                    <div class="card-body">
+                        <h5 class="card-title">With Approved Certs</h5>
+                        <p class="card-text display-4">{{ students_with_certs }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-info">
+                    <div class="card-body">
+                        <h5 class="card-title">Participation Rate</h5>
+                        <p class="card-text display-4">{{ participation_rate }}%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Main Table -->
+            <div class="col-md-9">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>All Students ({{ total_results }} results)</span>
+                        <a href="{{ url_for('main.hod_export_students') }}" class="btn btn-sm btn-success">📥 Export
+                            CSV</a>
+                    </div>
+                    <div class="card-body">
+                        <!-- Filters -->
+                        <form method="GET" class="row mb-3">
+                            <div class="col-md-3">
+                                <input type="text" name="search" class="form-control" placeholder="Search name/roll..."
+                                    value="{{ request.args.get('search', '') }}">
+                            </div>
+                            <div class="col-md-2">
+                                <select name="batch_year" class="form-control">
+                                    <option value="">All Batches</option>
+                                    {% for batch in batches %}
+                                    <option value="{{ batch }}" {{ 'selected' if
+                                        request.args.get('batch_year')==batch|string else '' }}>{{ batch }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" name="min_approved" class="form-control" placeholder="Min Approved"
+                                    value="{{ request.args.get('min_approved', '') }}">
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" name="zero_participation"
+                                        value="true" id="zeroCheck" {{ 'checked' if
+                                        request.args.get('zero_participation')=='true' else '' }}>
+                                    <label class="form-check-label" for="zeroCheck">Zero Participation</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-primary">Filter</button>
+                                <a href="{{ url_for('main.hod_students') }}" class="btn btn-secondary">Clear</a>
+                            </div>
+                        </form>
+
+                        <!-- Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Roll No</th>
+                                        <th>Name</th>
+                                        <th>Batch</th>
+                                        <th>Total Certs</th>
+                                        <th>Approved</th>
+                                        <th>Rejected</th>
+                                        <th>Last Activity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for s in students %}
+                                    <tr>
+                                        <td>{{ s.institution_id or '-' }}</td>
+                                        <td>{{ s.full_name }}</td>
+                                        <td>{{ s.batch_year or '-' }}</td>
+                                        <td>{{ s.total_certs }}</td>
+                                        <td><span class="badge bg-success">{{ s.approved_certs }}</span></td>
+                                        <td><span class="badge bg-danger">{{ s.rejected_certs }}</span></td>
+                                        <td>{{ s.last_activity.strftime('%Y-%m-%d') if s.last_activity else '-' }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">No students found.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        {% if total_pages > 1 %}
+                        <nav>
+                            <ul class="pagination justify-content-center">
+                                {% if page > 1 %}
+                                <li class="page-item">
+                                    <a class="page-link"
+                                        href="?page={{ page - 1 }}&search={{ request.args.get('search', '') }}&batch_year={{ request.args.get('batch_year', '') }}&min_approved={{ request.args.get('min_approved', '') }}&zero_participation={{ request.args.get('zero_participation', '') }}">Previous</a>
+                                </li>
+                                {% endif %}
+
+                                {% for p in range(1, total_pages + 1) %}
+                                {% if p >= page - 2 and p <= page + 2 %} <li
+                                    class="page-item {{ 'active' if p == page else '' }}">
+                                    <a class="page-link"
+                                        href="?page={{ p }}&search={{ request.args.get('search', '') }}&batch_year={{ request.args.get('batch_year', '') }}&min_approved={{ request.args.get('min_approved', '') }}&zero_participation={{ request.args.get('zero_participation', '') }}">{{
+                                        p }}</a>
+                                    </li>
+                                    {% endif %}
+                                    {% endfor %}
+
+                                    {% if page < total_pages %} <li class="page-item">
+                                        <a class="page-link"
+                                            href="?page={{ page + 1 }}&search={{ request.args.get('search', '') }}&batch_year={{ request.args.get('batch_year', '') }}&min_approved={{ request.args.get('min_approved', '') }}&zero_participation={{ request.args.get('zero_participation', '') }}">Next</a>
+                                        </li>
+                                        {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar: Top Students -->
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header">🏆 Top 5 Students</div>
+                    <ul class="list-group list-group-flush">
+                        {% for s in top_students %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ s.full_name }}</strong><br>
+                                <small class="text-muted">{{ s.institution_id or 'N/A' }}</small>
+                            </div>
+                            <span class="badge bg-success rounded-pill">{{ s.approved_count }}</span>
+                        </li>
+                        {% else %}
+                        <li class="list-group-item text-muted">No data available.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

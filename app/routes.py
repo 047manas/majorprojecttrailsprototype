@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import or_, and_, func, desc, case, distinct, extract
+from sqlalchemy.orm import aliased
 
 # --- Imports from Modules ---
 from app.models import db, User, ActivityType, StudentActivity
@@ -514,7 +515,205 @@ def hod_export_students():
     output.headers["Content-type"] = "text/csv"
     return output
 
+@bp.route('/hod/students')
+@role_required('faculty')
+def hod_students():
+    """Full department student list with advanced filters and pagination."""
+    if current_user.position != 'hod': abort(403)
+    
+    dept = current_user.department
+    if not dept:
+        flash("Department not assigned.", "error")
+        return redirect(url_for('main.index'))
+    
+    # Filters
+    search = request.args.get('search', '').strip()
+    batch_filter = request.args.get('batch_year', '')
+    min_approved = request.args.get('min_approved', type=int)
+    zero_participation = request.args.get('zero_participation', '') == 'true'
+    page = request.args.get('page', 1, type=int)
+    per_page = 25
+    
+    # Alias for Student
+    Student = aliased(User)
+    
+    # Base: All students in dept
+    base_q = User.query.filter_by(role='student', department=dept)
+    
+    if search:
+        base_q = base_q.filter(
+            or_(
+                User.full_name.ilike(f'%{search}%'),
+                User.institution_id.ilike(f'%{search}%')
+            )
+        )
+    if batch_filter:
+        base_q = base_q.filter(User.batch_year == batch_filter)
+    
+    # Subquery for cert counts
+    cert_counts = db.session.query(
+        StudentActivity.student_id,
+        func.count(StudentActivity.id).label('total_certs'),
+        func.sum(case((StudentActivity.status.in_(['faculty_verified', 'auto_verified']), 1), else_=0)).label('approved_certs'),
+        func.sum(case((StudentActivity.status == 'rejected', 1), else_=0)).label('rejected_certs'),
+        func.max(StudentActivity.updated_at).label('last_activity')
+    ).group_by(StudentActivity.student_id).subquery()
+    
+    # Join students with cert counts
+    students_with_stats = db.session.query(
+        User.id,
+        User.full_name,
+        User.institution_id,
+        User.batch_year,
+        func.coalesce(cert_counts.c.total_certs, 0).label('total_certs'),
+        func.coalesce(cert_counts.c.approved_certs, 0).label('approved_certs'),
+        func.coalesce(cert_counts.c.rejected_certs, 0).label('rejected_certs'),
+        cert_counts.c.last_activity
+    ).outerjoin(cert_counts, User.id == cert_counts.c.student_id)\
+     .filter(User.role == 'student', User.department == dept)
+    
+    # Apply search and batch filters
+    if search:
+        students_with_stats = students_with_stats.filter(
+            or_(
+                User.full_name.ilike(f'%{search}%'),
+                User.institution_id.ilike(f'%{search}%')
+            )
+        )
+    if batch_filter:
+        students_with_stats = students_with_stats.filter(User.batch_year == batch_filter)
+    
+    # Apply min_approved filter
+    if min_approved is not None:
+        students_with_stats = students_with_stats.having(
+            func.coalesce(cert_counts.c.approved_certs, 0) >= min_approved
+        )
+    
+    # Apply zero_participation filter
+    if zero_participation:
+        students_with_stats = students_with_stats.having(
+            func.coalesce(cert_counts.c.approved_certs, 0) == 0
+        )
+    
+    # Group and order
+    students_with_stats = students_with_stats.group_by(
+        User.id, User.full_name, User.institution_id, User.batch_year,
+        cert_counts.c.total_certs, cert_counts.c.approved_certs, 
+        cert_counts.c.rejected_certs, cert_counts.c.last_activity
+    ).order_by(User.institution_id)
+    
+    # Pagination
+    total = students_with_stats.count()
+    students = students_with_stats.offset((page - 1) * per_page).limit(per_page).all()
+    total_pages = (total + per_page - 1) // per_page
+    
+    # Top 5 students by approved certs
+    top_students = db.session.query(
+        User.full_name,
+        User.institution_id,
+        func.count(StudentActivity.id).label('approved_count')
+    ).join(StudentActivity, StudentActivity.student_id == User.id)\
+     .filter(User.department == dept, StudentActivity.status.in_(['faculty_verified', 'auto_verified']))\
+     .group_by(User.id, User.full_name, User.institution_id)\
+     .order_by(desc('approved_count'))\
+     .limit(5).all()
+    
+    # Get batches for filter dropdown
+    batches = db.session.query(User.batch_year).filter(
+        User.role == 'student', User.department == dept, User.batch_year.isnot(None)
+    ).distinct().order_by(User.batch_year.desc()).all()
+    batches = [b[0] for b in batches]
+    
+    # Stats
+    total_students = User.query.filter_by(role='student', department=dept).count()
+    students_with_certs = db.session.query(func.count(distinct(StudentActivity.student_id)))\
+        .join(User, StudentActivity.student_id == User.id)\
+        .filter(User.department == dept, StudentActivity.status.in_(['faculty_verified', 'auto_verified'])).scalar() or 0
+    participation_rate = round(students_with_certs / total_students * 100, 1) if total_students > 0 else 0
+    
+    return render_template('hod_students.html',
+        students=students,
+        top_students=top_students,
+        batches=batches,
+        total_students=total_students,
+        students_with_certs=students_with_certs,
+        participation_rate=participation_rate,
+        page=page,
+        total_pages=total_pages,
+        total_results=total
+    )
+
+@bp.route('/incharge/dashboard')
+@role_required('faculty')
+def incharge_dashboard():
+    """Dashboard for Activity In-Charges showing their managed activities."""
+    if current_user.position != 'activity_incharge': abort(403)
+    
+    dept = current_user.department
+    
+    # Get activity types assigned to this in-charge
+    # For now, we'll show all activity types the in-charge is associated with
+    # This could be refined with an assigned_activity_type_id on User model
+    assigned_types = ActivityType.query.all()  # Or filter by assigned_user_id if exists
+    
+    # For each activity type, compute stats
+    activities_data = []
+    for at in assigned_types:
+        # Get all submissions for this type in the in-charge's dept
+        Student = aliased(User)
+        base_q = db.session.query(StudentActivity).join(Student, StudentActivity.student_id == Student.id).filter(
+            Student.department == dept,
+            StudentActivity.activity_type_id == at.id
+        )
+        
+        total_submissions = base_q.count()
+        if total_submissions == 0:
+            continue  # Skip empty activity types
+            
+        verified = base_q.filter(StudentActivity.status.in_(['faculty_verified', 'auto_verified'])).count()
+        pending = base_q.filter(StudentActivity.status == 'pending').count()
+        rejected = base_q.filter(StudentActivity.status == 'rejected').count()
+        
+        # Unique students who submitted
+        unique_students = db.session.query(func.count(distinct(StudentActivity.student_id))).join(
+            Student, StudentActivity.student_id == Student.id
+        ).filter(Student.department == dept, StudentActivity.activity_type_id == at.id).scalar() or 0
+        
+        activities_data.append({
+            'id': at.id,
+            'name': at.name,
+            'total_submissions': total_submissions,
+            'verified': verified,
+            'pending': pending,
+            'rejected': rejected,
+            'unique_students': unique_students,
+            'approval_rate': round(verified / total_submissions * 100, 1) if total_submissions > 0 else 0
+        })
+    
+    # Sort by total_submissions descending
+    activities_data.sort(key=lambda x: x['total_submissions'], reverse=True)
+    
+    # Overall stats
+    total_students_engaged = db.session.query(func.count(distinct(StudentActivity.student_id))).join(
+        User, StudentActivity.student_id == User.id
+    ).filter(User.department == dept).scalar() or 0
+    
+    total_submissions = sum(a['total_submissions'] for a in activities_data)
+    total_verified = sum(a['verified'] for a in activities_data)
+    
+    # Lowest participation types (for insights)
+    lowest_participation = sorted(activities_data, key=lambda x: x['unique_students'])[:3] if activities_data else []
+    
+    return render_template('incharge_dashboard.html',
+        activities=activities_data,
+        total_students_engaged=total_students_engaged,
+        total_submissions=total_submissions,
+        total_verified=total_verified,
+        lowest_participation=lowest_participation
+    )
+
 @bp.route('/admin/stats')
+
 @role_required('admin')
 def admin_stats():
     # Filters
@@ -915,6 +1114,72 @@ def admin_users():
     users = query.order_by(User.created_at.desc()).all()
     return render_template('admin_users.html', users=users, search_query=search_query)
 
+@bp.route('/faculty/stats')
+@role_required('faculty')
+def faculty_stats():
+    dept = current_user.department
+    if not dept:
+        flash("Department not assigned.", "error")
+        return redirect(url_for('main.index'))
+
+    # --- 1. KPIs ---
+    # Total Students
+    total_students = User.query.filter_by(role='student', department=dept).count()
+    
+    # Alias for Student User
+    Student = aliased(User)
+
+    # Base Query for Dept Activities
+    # Explicitly join StudentActivity -> Student (User)
+    base_q = db.session.query(StudentActivity).join(Student, StudentActivity.student_id == Student.id).filter(Student.department == dept)
+    
+    # Total Certificates
+    total_certs = base_q.count()
+    
+    # Status Breakdown
+    status_stats = db.session.query(
+        StudentActivity.status, func.count(StudentActivity.id)
+    ).join(Student, StudentActivity.student_id == Student.id).filter(Student.department == dept).group_by(StudentActivity.status).all()
+    status_counts = {s: c for s, c in status_stats}
+    
+    # Unique Events (Implicit)
+    # Event = (Title, Organizer, IssueDate, TypeID)
+    unique_events_q = db.session.query(
+        StudentActivity.title, 
+        StudentActivity.organizer, 
+        StudentActivity.issue_date,
+        StudentActivity.activity_type_id
+    ).join(Student, StudentActivity.student_id == Student.id).filter(Student.department == dept)
+    
+    total_events = unique_events_q.distinct().count()
+
+    # --- 2. Recent Activity Timeline ---
+    recent_activities = base_q.order_by(StudentActivity.updated_at.desc()).limit(10).all()
+
+    # --- 3. Events List (Aggregated) ---
+    # Group by Event -> Count Participants, Count Verified
+    events_list_q = db.session.query(
+        StudentActivity.title,
+        StudentActivity.organizer,
+        StudentActivity.issue_date,
+        ActivityType.name.label('type_name'),
+        func.count(StudentActivity.id).label('participant_count'),
+        func.sum(case((StudentActivity.status == 'faculty_verified', 1), else_=0)).label('verified_count')
+    ).join(Student, StudentActivity.student_id == Student.id).outerjoin(ActivityType, StudentActivity.activity_type_id == ActivityType.id)\
+     .filter(Student.department == dept)\
+     .group_by(StudentActivity.title, StudentActivity.organizer, StudentActivity.issue_date, ActivityType.name)\
+     .order_by(StudentActivity.issue_date.desc())
+     
+    events_list = events_list_q.all()
+
+    return render_template('faculty_stats.html',
+        total_students=total_students,
+        total_certs=total_certs,
+        total_events=total_events,
+        status_counts=status_counts,
+        recent_activities=recent_activities,
+        events_list=events_list
+    )
 @bp.route('/admin/users/create', methods=['POST'])
 @role_required('admin')
 def admin_create_user():
@@ -1328,3 +1593,569 @@ def verify_public(token):
                 hash_match = True
     
     return render_template('verify_public.html', activity=activity, hash_match=hash_match, recomputed_hash=recomputed_hash)
+
+# --- Enhanced Stats Routes ---
+
+@bp.route('/faculty/event_participants')
+@role_required('faculty', 'hod', 'admin')
+def event_participants():
+    # Identifiers for the "Implicit Event"
+    title = request.args.get('title')
+    organizer = request.args.get('organizer')
+    issue_date_str = request.args.get('date') # YYYY-MM-DD
+    
+    if not title:
+        flash("Event Title required.", "error")
+        return redirect(url_for('main.faculty_stats'))
+
+    # Determine Dept context
+    if current_user.role == 'admin':
+        dept = request.args.get('department') # Admin can see any dept
+    else:
+        dept = current_user.department
+
+    if not dept:
+         flash("Department context missing.", "error")
+         return redirect(url_for('main.index'))
+
+    # 1. Get All Students in Dept
+    all_students = User.query.filter_by(role='student', department=dept).order_by(User.institution_id).all()
+    
+    # 2. Get Participants for this Event
+    # Use Aliased Student
+    Student = aliased(User)
+    
+    # Filter StudentActivity by Title, Organizer, Date (if provided)
+    q = db.session.query(StudentActivity).join(Student, StudentActivity.student_id == Student.id).filter(Student.department == dept, StudentActivity.title == title)
+    
+    if organizer:
+        q = q.filter(StudentActivity.organizer == organizer)
+    if issue_date_str and issue_date_str != 'None':
+        try:
+            issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
+            q = q.filter(StudentActivity.issue_date == issue_date)
+        except ValueError:
+            pass # Ignore invalid date
+            
+    participants = q.all()
+    
+    # 3. Merge Data (Student -> Status)
+    # Map student_id -> activity
+    part_map = {p.student_id: p for p in participants}
+    
+    student_data = []
+    for s in all_students:
+        act = part_map.get(s.id)
+        status = act.status if act else 'not_submitted'
+        verifier = act.faculty.full_name if (act and act.faculty) else None
+        
+        student_data.append({
+            'full_name': s.full_name,
+            'institution_id': s.institution_id,
+            'batch_year': s.batch_year,
+            'status': status,
+            'verifier': verifier,
+            'updated_at': act.updated_at if act else None,
+            'activity_id': act.id if act else None
+        })
+        
+    return render_template('event_participants.html', 
+        event_title=title, 
+        organizer=organizer, 
+        issue_date=issue_date_str,
+        department=dept,
+        students=student_data
+    )
+
+# --- API Routes (JSON) ---
+
+@bp.route('/api/event/participants')
+@role_required('faculty', 'hod', 'admin')
+def api_event_participants():
+    """
+    JSON API for event participants (used by AJAX modal).
+    Returns: { submitted: [...], not_submitted: [...], stats: {...} }
+    """
+    from flask import jsonify
+    
+    title = request.args.get('title')
+    organizer = request.args.get('organizer')
+    issue_date_str = request.args.get('date')
+    
+    # Filters
+    status_filter = request.args.get('status')
+    batch_filter = request.args.get('batch_year')
+    search_query = request.args.get('search', '').strip().lower()
+    
+    if not title:
+        return jsonify({'error': 'Event title required'}), 400
+    
+    # Determine Dept context
+    if current_user.role == 'admin':
+        dept = request.args.get('department')
+    else:
+        dept = current_user.department
+    
+    if not dept:
+        return jsonify({'error': 'Department context missing'}), 400
+    
+    # Alias for Student
+    Student = aliased(User)
+    
+    # Get all students in dept
+    students_q = User.query.filter_by(role='student', department=dept)
+    if batch_filter:
+        students_q = students_q.filter(User.batch_year == batch_filter)
+    if search_query:
+        students_q = students_q.filter(
+            or_(
+                User.full_name.ilike(f'%{search_query}%'),
+                User.institution_id.ilike(f'%{search_query}%')
+            )
+        )
+    all_students = students_q.order_by(User.institution_id).all()
+    
+    # Get participants for this event
+    q = db.session.query(StudentActivity).join(Student, StudentActivity.student_id == Student.id).filter(
+        Student.department == dept,
+        StudentActivity.title == title
+    )
+    if organizer:
+        q = q.filter(StudentActivity.organizer == organizer)
+    if issue_date_str and issue_date_str != 'None':
+        try:
+            issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
+            q = q.filter(StudentActivity.issue_date == issue_date)
+        except ValueError:
+            pass
+    
+    participants = q.all()
+    part_map = {p.student_id: p for p in participants}
+    
+    # 3 groups for enhanced bar click
+    participated_submitted = []   # Students who participated AND have verified certificate
+    participated_no_cert = []     # Students who participated but cert is pending/rejected
+    not_participated = []         # Students who didn't participate at all
+    
+    for s in all_students:
+        act = part_map.get(s.id)
+        student_info = {
+            'id': s.id,
+            'full_name': s.full_name,
+            'institution_id': s.institution_id or '',
+            'batch_year': s.batch_year or '',
+            'status': act.status if act else 'not_participated',
+            'updated_at': act.updated_at.strftime('%Y-%m-%d %H:%M') if (act and act.updated_at) else None
+        }
+        
+        if act:
+            # Student has a submission for this event
+            if act.status in ('faculty_verified', 'auto_verified'):
+                # Verified = participated + submitted
+                if status_filter and status_filter not in ('faculty_verified', 'auto_verified', 'participated_submitted'):
+                    continue
+                participated_submitted.append(student_info)
+            else:
+                # Pending or Rejected = participated but no cert yet
+                if status_filter and status_filter not in ('pending', 'rejected', 'participated_no_cert'):
+                    continue
+                participated_no_cert.append(student_info)
+        else:
+            # No submission = not participated
+            if status_filter and status_filter not in ('not_participated', 'not_submitted'):
+                continue
+            not_participated.append(student_info)
+    
+    stats = {
+        'total_students': len(all_students),
+        'participated_submitted_count': len(participated_submitted),
+        'participated_no_cert_count': len(participated_no_cert),
+        'not_participated_count': len(not_participated),
+        # Legacy stats for backward compatibility
+        'submitted_count': len(participated_submitted) + len(participated_no_cert),
+        'not_submitted_count': len(not_participated),
+        'verified_count': len(participated_submitted),
+        'pending_count': sum(1 for s in participated_no_cert if s['status'] == 'pending'),
+        'rejected_count': sum(1 for s in participated_no_cert if s['status'] == 'rejected')
+    }
+    
+    return jsonify({
+        # New 3-group structure
+        'participated_submitted': participated_submitted,
+        'participated_no_cert': participated_no_cert,
+        'not_participated': not_participated,
+        # Legacy keys for backward compatibility
+        'submitted': participated_submitted + participated_no_cert,
+        'not_submitted': not_participated,
+        'stats': stats,
+        'event': {
+            'title': title,
+            'organizer': organizer,
+            'date': issue_date_str
+        }
+    })
+
+@bp.route('/faculty/export/participants')
+@role_required('faculty', 'hod', 'admin')
+def export_event_participants():
+    """Export event participants to CSV with filters."""
+    import csv
+    import io
+    
+    title = request.args.get('title')
+    organizer = request.args.get('organizer')
+    issue_date_str = request.args.get('date')
+    
+    # Filters
+    status_filter = request.args.get('status')
+    batch_filter = request.args.get('batch_year')
+    search_query = request.args.get('search', '').strip().lower()
+    
+    if not title:
+        flash("Event title required for export.", "error")
+        return redirect(request.referrer or url_for('main.faculty_stats'))
+    
+    # Determine Dept context
+    if current_user.role == 'admin':
+        dept = request.args.get('department')
+    else:
+        dept = current_user.department
+    
+    if not dept:
+        flash("Department context missing.", "error")
+        return redirect(request.referrer or url_for('main.faculty_stats'))
+    
+    # Alias for Student
+    Student = aliased(User)
+    
+    # Get all students in dept
+    students_q = User.query.filter_by(role='student', department=dept)
+    if batch_filter:
+        students_q = students_q.filter(User.batch_year == batch_filter)
+    if search_query:
+        students_q = students_q.filter(
+            or_(
+                User.full_name.ilike(f'%{search_query}%'),
+                User.institution_id.ilike(f'%{search_query}%')
+            )
+        )
+    all_students = students_q.order_by(User.institution_id).all()
+    
+    # Get participants for this event
+    q = db.session.query(StudentActivity).join(Student, StudentActivity.student_id == Student.id).filter(
+        Student.department == dept,
+        StudentActivity.title == title
+    )
+    if organizer:
+        q = q.filter(StudentActivity.organizer == organizer)
+    if issue_date_str and issue_date_str != 'None':
+        try:
+            issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
+            q = q.filter(StudentActivity.issue_date == issue_date)
+        except ValueError:
+            pass
+    
+    participants = q.all()
+    part_map = {p.student_id: p for p in participants}
+    
+    # Build CSV
+    si = io.StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Name', 'Roll No', 'Batch', 'Status', 'Updated'])
+    
+    for s in all_students:
+        act = part_map.get(s.id)
+        status = act.status if act else 'not_submitted'
+        updated = act.updated_at.strftime('%Y-%m-%d %H:%M') if (act and act.updated_at) else ''
+        
+        # Apply status filter
+        if status_filter and status != status_filter:
+            continue
+        
+        cw.writerow([s.full_name, s.institution_id or '', s.batch_year or '', status, updated])
+    
+    output = make_response(si.getvalue())
+    output.headers["Content-Disposition"] = f"attachment; filename={title.replace(' ', '_')}_participants.csv"
+    output.headers["Content-type"] = "text/csv"
+    return output
+
+
+# --- Stats Card Click API Endpoints ---
+
+@bp.route('/api/stats/activities')
+@role_required('faculty', 'hod', 'admin')
+def api_stats_activities():
+    """
+    Returns all activities/events for the department.
+    For "Total Activities" card click.
+    """
+    from flask import jsonify
+    
+    # Determine dept context
+    if current_user.role == 'admin':
+        dept = request.args.get('department')
+    else:
+        dept = current_user.department
+    
+    if not dept:
+        return jsonify({'error': 'Department context missing'}), 400
+    
+    # Filters
+    search = request.args.get('search', '').strip().lower()
+    activity_type = request.args.get('activity_type')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 25, type=int)
+    
+    # Alias for Student
+    Student = aliased(User)
+    
+    # Get all unique events (grouped by title, organizer, date)
+    events_q = db.session.query(
+        StudentActivity.title,
+        StudentActivity.organizer,
+        StudentActivity.issue_date,
+        StudentActivity.activity_type_id,
+        ActivityType.name.label('type_name'),
+        func.count(StudentActivity.id).label('participant_count'),
+        func.sum(case((StudentActivity.status.in_(['faculty_verified', 'auto_verified']), 1), else_=0)).label('approved'),
+        func.sum(case((StudentActivity.status == 'pending', 1), else_=0)).label('pending'),
+        func.sum(case((StudentActivity.status == 'rejected', 1), else_=0)).label('rejected')
+    ).join(Student, StudentActivity.student_id == Student.id)\
+     .outerjoin(ActivityType, StudentActivity.activity_type_id == ActivityType.id)\
+     .filter(Student.department == dept)
+    
+    # Apply filters
+    if search:
+        events_q = events_q.filter(
+            or_(
+                StudentActivity.title.ilike(f'%{search}%'),
+                StudentActivity.organizer.ilike(f'%{search}%')
+            )
+        )
+    if activity_type:
+        events_q = events_q.filter(StudentActivity.activity_type_id == activity_type)
+    if date_from:
+        try:
+            d = datetime.strptime(date_from, '%Y-%m-%d').date()
+            events_q = events_q.filter(StudentActivity.issue_date >= d)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            d = datetime.strptime(date_to, '%Y-%m-%d').date()
+            events_q = events_q.filter(StudentActivity.issue_date <= d)
+        except ValueError:
+            pass
+    
+    events_q = events_q.group_by(
+        StudentActivity.title, StudentActivity.organizer, StudentActivity.issue_date,
+        StudentActivity.activity_type_id, ActivityType.name
+    ).order_by(StudentActivity.issue_date.desc())
+    
+    # Pagination
+    total = events_q.count()
+    events = events_q.offset((page - 1) * per_page).limit(per_page).all()
+    
+    activities = []
+    for e in events:
+        activities.append({
+            'title': e.title,
+            'organizer': e.organizer or '',
+            'date': str(e.issue_date) if e.issue_date else '',
+            'type': e.type_name or 'Other',
+            'participants': e.participant_count,
+            'approved': e.approved or 0,
+            'pending': e.pending or 0,
+            'rejected': e.rejected or 0
+        })
+    
+    return jsonify({
+        'activities': activities,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page
+    })
+
+
+@bp.route('/api/stats/verified')
+@role_required('faculty', 'hod', 'admin')
+def api_stats_verified():
+    """
+    Returns all verified/approved certificates.
+    For "Verified Portfolio" card click.
+    """
+    from flask import jsonify
+    
+    if current_user.role == 'admin':
+        dept = request.args.get('department')
+    else:
+        dept = current_user.department
+    
+    if not dept:
+        return jsonify({'error': 'Department context missing'}), 400
+    
+    # Filters
+    search = request.args.get('search', '').strip().lower()
+    batch_year = request.args.get('batch_year')
+    activity_type = request.args.get('activity_type')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 25, type=int)
+    
+    # Query verified certificates
+    Student = aliased(User)
+    Faculty = aliased(User)
+    
+    certs_q = db.session.query(
+        Student.full_name.label('student_name'),
+        Student.institution_id.label('roll_number'),
+        Student.batch_year,
+        StudentActivity.id.label('cert_id'),
+        StudentActivity.title.label('event_name'),
+        StudentActivity.updated_at.label('approval_date'),
+        StudentActivity.status,
+        Faculty.full_name.label('verifier')
+    ).join(Student, StudentActivity.student_id == Student.id)\
+     .outerjoin(Faculty, StudentActivity.verified_by_id == Faculty.id)\
+     .filter(
+         Student.department == dept,
+         StudentActivity.status.in_(['faculty_verified', 'auto_verified'])
+     )
+    
+    if search:
+        certs_q = certs_q.filter(
+            or_(
+                Student.full_name.ilike(f'%{search}%'),
+                Student.institution_id.ilike(f'%{search}%'),
+                StudentActivity.title.ilike(f'%{search}%')
+            )
+        )
+    if batch_year:
+        certs_q = certs_q.filter(Student.batch_year == batch_year)
+    if activity_type:
+        certs_q = certs_q.filter(StudentActivity.activity_type_id == activity_type)
+    
+    certs_q = certs_q.order_by(StudentActivity.updated_at.desc())
+    
+    total = certs_q.count()
+    certs = certs_q.offset((page - 1) * per_page).limit(per_page).all()
+    
+    verified = []
+    for c in certs:
+        verified.append({
+            'student_name': c.student_name,
+            'roll_number': c.roll_number or '',
+            'batch_year': c.batch_year or '',
+            'cert_id': c.cert_id,
+            'event_name': c.event_name,
+            'approval_date': c.approval_date.strftime('%Y-%m-%d %H:%M') if c.approval_date else '',
+            'status': c.status,
+            'verifier': c.verifier or 'Auto-Verified'
+        })
+    
+    return jsonify({
+        'verified': verified,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page
+    })
+
+
+@bp.route('/api/stats/participation')
+@role_required('faculty', 'hod', 'admin')
+def api_stats_participation():
+    """
+    Returns student participation summary.
+    For "Student Participation" card click.
+    """
+    from flask import jsonify
+    
+    if current_user.role == 'admin':
+        dept = request.args.get('department')
+    else:
+        dept = current_user.department
+    
+    if not dept:
+        return jsonify({'error': 'Department context missing'}), 400
+    
+    # Filters
+    search = request.args.get('search', '').strip().lower()
+    batch_year = request.args.get('batch_year')
+    min_events = request.args.get('min_events', type=int)
+    zero_participation = request.args.get('zero_participation', '') == 'true'
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 25, type=int)
+    
+    # Subquery for counts per student
+    cert_counts = db.session.query(
+        StudentActivity.student_id,
+        func.count(distinct(func.concat(StudentActivity.title, StudentActivity.organizer, StudentActivity.issue_date))).label('events_participated'),
+        func.count(StudentActivity.id).label('submitted'),
+        func.sum(case((StudentActivity.status.in_(['faculty_verified', 'auto_verified']), 1), else_=0)).label('approved'),
+        func.sum(case((StudentActivity.status == 'rejected', 1), else_=0)).label('rejected'),
+        func.max(StudentActivity.updated_at).label('last_activity')
+    ).group_by(StudentActivity.student_id).subquery()
+    
+    # Join with students
+    students_q = db.session.query(
+        User.id,
+        User.full_name,
+        User.institution_id,
+        User.batch_year,
+        func.coalesce(cert_counts.c.events_participated, 0).label('events_participated'),
+        func.coalesce(cert_counts.c.submitted, 0).label('submitted'),
+        func.coalesce(cert_counts.c.approved, 0).label('approved'),
+        func.coalesce(cert_counts.c.rejected, 0).label('rejected'),
+        cert_counts.c.last_activity
+    ).outerjoin(cert_counts, User.id == cert_counts.c.student_id)\
+     .filter(User.role == 'student', User.department == dept)
+    
+    if search:
+        students_q = students_q.filter(
+            or_(
+                User.full_name.ilike(f'%{search}%'),
+                User.institution_id.ilike(f'%{search}%')
+            )
+        )
+    if batch_year:
+        students_q = students_q.filter(User.batch_year == batch_year)
+    
+    # Having filters
+    if min_events is not None:
+        students_q = students_q.having(func.coalesce(cert_counts.c.events_participated, 0) >= min_events)
+    if zero_participation:
+        students_q = students_q.having(func.coalesce(cert_counts.c.events_participated, 0) == 0)
+    
+    students_q = students_q.group_by(
+        User.id, User.full_name, User.institution_id, User.batch_year,
+        cert_counts.c.events_participated, cert_counts.c.submitted,
+        cert_counts.c.approved, cert_counts.c.rejected, cert_counts.c.last_activity
+    ).order_by(desc('approved'))
+    
+    total = students_q.count()
+    students = students_q.offset((page - 1) * per_page).limit(per_page).all()
+    
+    participation = []
+    for s in students:
+        participation.append({
+            'id': s.id,
+            'student_name': s.full_name,
+            'roll_number': s.institution_id or '',
+            'batch_year': s.batch_year or '',
+            'events_participated': s.events_participated,
+            'submitted': s.submitted,
+            'approved': s.approved,
+            'rejected': s.rejected,
+            'last_activity': s.last_activity.strftime('%Y-%m-%d') if s.last_activity else ''
+        })
+    
+    return jsonify({
+        'participation': participation,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page
+    })
