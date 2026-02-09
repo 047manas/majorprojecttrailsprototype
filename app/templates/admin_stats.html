@@ -7,6 +7,25 @@
     <title>Admin - Global Statistics</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .clickable-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .clickable-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .dept-row {
+            cursor: pointer;
+        }
+
+        .dept-row:hover {
+            background-color: #f0f9ff !important;
+        }
+    </style>
 </head>
 
 <body>
@@ -16,7 +35,8 @@
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <div class="navbar-brand">📜 Certificate Verification</div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('main.admin_student_stats') }}" class="btn btn-sm btn-outline-info">Student
+                <a href="{{ url_for('main.insights_page') }}" class="btn btn-sm btn-outline-info">📊 Insights</a>
+                <a href="{{ url_for('main.admin_student_stats') }}" class="btn btn-sm btn-outline-secondary">Student
                     Analytics</a>
                 <a href="{{ url_for('main.admin_users') }}" class="btn btn-sm btn-outline-primary">Manage Users</a>
                 <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
@@ -97,40 +117,47 @@
             </div>
         </div>
 
-        <!-- SNPs -->
+        <!-- KPI Cards Row 1 -->
         <div class="row mb-4">
             <div class="col-md-3">
-                <div class="card text-white bg-primary mb-3">
+                <div class="card text-white bg-primary mb-3 clickable-card" onclick="showStatsModal('participation')"
+                    title="Click to see student participation">
                     <div class="card-body">
-                        <h5 class="card-title">Total Students</h5>
+                        <h5 class="card-title">Total Students <small>🔍</small></h5>
                         <p class="card-text display-6">{{ total_students }}</p>
+                        <small>(Click to view)</small>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card text-white bg-warning mb-3">
+                <div class="card text-white bg-warning mb-3 clickable-card" onclick="showStatsModal('activities')"
+                    title="Click to see all activities">
                     <div class="card-body">
-                        <h5 class="card-title">Unique Activities</h5>
+                        <h5 class="card-title">Unique Activities <small>🔍</small></h5>
                         <p class="card-text display-6">{{ total_unique_activities }}</p>
+                        <small>(Click to view)</small>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card text-white bg-info mb-3">
+                <div class="card text-white bg-info mb-3 clickable-card" onclick="showStatsModal('certificates')"
+                    title="Click to see certificates">
                     <div class="card-body">
-                        <h5 class="card-title">Certificates</h5>
+                        <h5 class="card-title">Certificates <small>🔍</small></h5>
                         <p class="card-text display-6">{{ total_certificates }}</p>
+                        <small>(Click to view)</small>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Row 2 -->
+        <!-- KPI Cards Row 2 -->
         <div class="row mb-4">
             <div class="col-md-3">
-                <div class="card text-white bg-success mb-3">
+                <div class="card text-white bg-success mb-3 clickable-card" onclick="showStatsModal('participation')"
+                    title="Click to see participating students">
                     <div class="card-body">
-                        <h5 class="card-title">Participating Students</h5>
+                        <h5 class="card-title">Participating Students <small>🔍</small></h5>
                         <p class="card-text display-6">{{ participating_students }}</p>
                         <small>{{ (participating_students / total_students * 100)|round(1) if total_students > 0 else 0
                             }}%</small>
@@ -138,11 +165,13 @@
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card text-white bg-secondary mb-3">
+                <div class="card text-white bg-secondary mb-3 clickable-card" onclick="showStatsModal('verified')"
+                    title="Click to see verified certificates">
                     <div class="card-body">
-                        <h5 class="card-title">Verified Certs</h5>
+                        <h5 class="card-title">Verified Certs <small>🔍</small></h5>
                         <p class="card-text display-6">{{ status_counts.get('faculty_verified', 0) +
                             status_counts.get('auto_verified', 0) }}</p>
+                        <small>(Click to view)</small>
                     </div>
                 </div>
             </div>
@@ -160,7 +189,8 @@
             </div>
             <div class="col-md-6">
                 <div class="card h-100">
-                    <div class="card-header">Department Participation</div>
+                    <div class="card-header">Department Participation <small class="text-muted">(Click bar to
+                            filter)</small></div>
                     <div class="card-body">
                         <canvas id="deptChart"></canvas>
                     </div>
@@ -170,10 +200,10 @@
 
         <!-- Department Overview Table -->
         <div class="card mb-4">
-            <div class="card-header">Department Overview</div>
+            <div class="card-header">Department Overview <small class="text-muted">(Click row to filter)</small></div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-bordered table-sm">
+                    <table class="table table-bordered table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>Department</th>
@@ -187,8 +217,9 @@
                         </thead>
                         <tbody>
                             {% for d in dept_overview %}
-                            <tr>
-                                <td>{{ d.department }}</td>
+                            <tr class="dept-row" onclick="filterByDept('{{ d.department }}')"
+                                title="Click to filter by {{ d.department }}">
+                                <td><strong>{{ d.department }}</strong></td>
                                 <td>{{ d.total_students }}</td>
                                 <td>{{ d.participating_students }}</td>
                                 <td>{{ d.total_certs }}</td>
@@ -251,7 +282,84 @@
 
     </div>
 
+    <!-- Stats Modal -->
+    <div class="modal fade" id="statsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="statsModalTitle">Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <input type="text" id="modalSearch" class="form-control form-control-sm"
+                                placeholder="Search name/roll...">
+                        </div>
+                        <div class="col-md-2">
+                            <select id="modalDept" class="form-control form-control-sm">
+                                <option value="">All Departments</option>
+                                {% for d in departments %}
+                                <option value="{{ d }}">{{ d }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select id="modalStatus" class="form-control form-control-sm">
+                                <option value="">All Statuses</option>
+                                <option value="pending">Pending</option>
+                                <option value="faculty_verified">Verified</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary btn-sm" onclick="applyModalFilters()">Filter</button>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <button class="btn btn-success btn-sm" onclick="exportModalCSV()">📥 Export CSV</button>
+                        </div>
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="row mb-3">
+                        <div class="col">
+                            <span class="badge bg-primary" id="modalStatTotal">Total: 0</span>
+                            <span class="badge bg-success" id="modalStatVerified">Verified: 0</span>
+                            <span class="badge bg-warning" id="modalStatPending">Pending: 0</span>
+                            <span class="badge bg-danger" id="modalStatRejected">Rejected: 0</span>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-striped table-sm">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Roll Number</th>
+                                    <th>Department</th>
+                                    <th>Batch</th>
+                                    <th>Status</th>
+                                    <th>Last Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody id="statsModalBody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav>
+                        <ul class="pagination justify-content-center" id="modalPagination"></ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Charts
         document.addEventListener('DOMContentLoaded', function () {
             const typeCtx = document.getElementById('typeChart').getContext('2d');
             new Chart(typeCtx, {
@@ -267,26 +375,151 @@
         });
 
         const deptCtx = document.getElementById('deptChart').getContext('2d');
-        new Chart(deptCtx, {
+        const deptChart = new Chart(deptCtx, {
             type: 'bar',
             data: {
                 labels: [{% for row in dept_stats %}"{{ row.department }}",{% endfor %}],
-            datasets: [
+        datasets: [
             {
                 label: 'Certificates',
                 data: [{% for row in dept_stats %}{{ row.cert_count }}, {% endfor %}],
             backgroundColor: '#4e73df'
                     },
-            {
-                label: 'Participating Students',
-                data: [{% for row in dept_stats %}{{ row.student_count }}, {% endfor %}],
-            backgroundColor: '#1cc88a'
+        {
+            label: 'Participating Students',
+                data: [{% for row in dept_stats %} { { row.student_count } }, {% endfor %}],
+        backgroundColor: '#1cc88a'
                     }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        options: {
+            responsive: true,
+                maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+            onClick: (e, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const dept = [{% for row in dept_stats %} "{{ row.department }}", {% endfor %}][idx];
+            filterByDept(dept);
+        }
+                }
+            }
         });
     });
+
+        // Filter by department
+        function filterByDept(dept) {
+            const url = new URL(window.location);
+            url.searchParams.set('department', dept);
+            window.location.href = url.toString();
+        }
+
+        // Stats Modal
+        let currentModalType = '';
+        let allModalData = [];
+
+        function showStatsModal(type) {
+            currentModalType = type;
+            const titles = {
+                'participation': 'Student Participation',
+                'activities': 'All Activities',
+                'certificates': 'All Certificates',
+                'verified': 'Verified Certificates'
+            };
+            document.getElementById('statsModalTitle').textContent = titles[type] || 'Details';
+            document.getElementById('modalSearch').value = '';
+            document.getElementById('modalDept').value = '';
+            document.getElementById('modalStatus').value = '';
+
+            loadModalData(type);
+            new bootstrap.Modal(document.getElementById('statsModal')).show();
+        }
+
+        function loadModalData(type, page = 1) {
+            const search = document.getElementById('modalSearch').value;
+            const dept = document.getElementById('modalDept').value;
+            const status = document.getElementById('modalStatus').value;
+
+            let url = `/api/stats/participation?page=${page}`;
+            if (search) url += `&search=${encodeURIComponent(search)}`;
+            if (dept) url += `&department=${encodeURIComponent(dept)}`;
+            if (status) url += `&status=${encodeURIComponent(status)}`;
+            if (type === 'verified') url += `&status=verified`;
+
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    allModalData = data.participation || [];
+
+                    // Update stats
+                    const total = data.total || allModalData.length;
+                    const verified = allModalData.filter(s => ['faculty_verified', 'auto_verified'].includes(s.status)).length;
+                    const pending = allModalData.filter(s => s.status === 'pending').length;
+                    const rejected = allModalData.filter(s => s.status === 'rejected').length;
+
+                    document.getElementById('modalStatTotal').textContent = `Total: ${total}`;
+                    document.getElementById('modalStatVerified').textContent = `Verified: ${verified}`;
+                    document.getElementById('modalStatPending').textContent = `Pending: ${pending}`;
+                    document.getElementById('modalStatRejected').textContent = `Rejected: ${rejected}`;
+
+                    renderModalTable(allModalData);
+                    renderModalPagination(data.page || 1, data.total_pages || 1);
+                })
+                .catch(err => console.error('Error loading data:', err));
+        }
+
+        function renderModalTable(data) {
+            const tbody = document.getElementById('statsModalBody');
+            const statusBadge = (s) => {
+                const colors = {
+                    faculty_verified: 'success',
+                    auto_verified: 'info',
+                    pending: 'warning',
+                    rejected: 'danger'
+                };
+                return `<span class="badge bg-${colors[s] || 'secondary'}">${s}</span>`;
+            };
+
+            tbody.innerHTML = data.map(s => `
+            <tr>
+                <td>${s.full_name || s.name || '-'}</td>
+                <td>${s.institution_id || s.roll_number || '-'}</td>
+                <td>${s.department || '-'}</td>
+                <td>${s.batch_year || '-'}</td>
+                <td>${statusBadge(s.status || 'none')}</td>
+                <td>${s.updated_at || s.last_activity || '-'}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="6" class="text-center text-muted">No data found</td></tr>';
+        }
+
+        function renderModalPagination(current, total) {
+            const ul = document.getElementById('modalPagination');
+            let html = '';
+            if (current > 1) html += `<li class="page-item"><a class="page-link" href="#" onclick="loadModalData('${currentModalType}', ${current - 1}); return false;">Prev</a></li>`;
+            for (let p = Math.max(1, current - 2); p <= Math.min(total, current + 2); p++) {
+                html += `<li class="page-item ${p === current ? 'active' : ''}"><a class="page-link" href="#" onclick="loadModalData('${currentModalType}', ${p}); return false;">${p}</a></li>`;
+            }
+            if (current < total) html += `<li class="page-item"><a class="page-link" href="#" onclick="loadModalData('${currentModalType}', ${current + 1}); return false;">Next</a></li>`;
+            ul.innerHTML = html;
+        }
+
+        function applyModalFilters() {
+            loadModalData(currentModalType, 1);
+        }
+
+        function exportModalCSV() {
+            let csv = 'Name,Roll Number,Department,Batch,Status,Last Updated\n';
+            allModalData.forEach(s => {
+                csv += `"${s.full_name || s.name || ''}","${s.institution_id || s.roll_number || ''}","${s.department || ''}","${s.batch_year || ''}","${s.status || ''}","${s.updated_at || ''}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `admin_${currentModalType}_export.csv`;
+            a.click();
+        }
     </script>
 </body>
 

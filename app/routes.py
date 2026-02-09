@@ -2727,3 +2727,4 @@ def api_event_students_export(department, event_key):
     response.headers['Content-Type'] = 'text/csv'
     response.headers['Content-Disposition'] = f'attachment; filename="{title}_students.csv"'
     return response
+
