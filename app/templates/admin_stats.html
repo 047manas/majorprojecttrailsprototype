@@ -108,6 +108,14 @@
                 </div>
             </div>
             <div class="col-md-3">
+                <div class="card text-white bg-warning mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Unique Activities</h5>
+                        <p class="card-text display-6">{{ total_unique_activities }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
                 <div class="card text-white bg-info mb-3">
                     <div class="card-body">
                         <h5 class="card-title">Certificates</h5>
@@ -115,10 +123,14 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="row mb-4">
             <div class="col-md-3">
                 <div class="card text-white bg-success mb-3">
                     <div class="card-body">
-                        <h5 class="card-title">Participating</h5>
+                        <h5 class="card-title">Participating Students</h5>
                         <p class="card-text display-6">{{ participating_students }}</p>
                         <small>{{ (participating_students / total_students * 100)|round(1) if total_students > 0 else 0
                             }}%</small>
@@ -128,7 +140,7 @@
             <div class="col-md-3">
                 <div class="card text-white bg-secondary mb-3">
                     <div class="card-body">
-                        <h5 class="card-title">Verified</h5>
+                        <h5 class="card-title">Verified Certs</h5>
                         <p class="card-text display-6">{{ status_counts.get('faculty_verified', 0) +
                             status_counts.get('auto_verified', 0) }}</p>
                     </div>

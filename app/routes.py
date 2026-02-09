@@ -564,6 +564,12 @@ def admin_stats():
     part_q = apply_admin_filters(db.session.query(distinct(StudentActivity.student_id)))
     participating_students = part_q.count()
 
+    # Unique Activities (Distinct Title + Organizer + Date)
+    # This represents distinct "Events" properly
+    unique_activities_q = db.session.query(StudentActivity.title, StudentActivity.organizer, StudentActivity.issue_date)
+    unique_activities_q = apply_admin_filters(unique_activities_q)
+    total_unique_activities = unique_activities_q.distinct().count()
+
     # 2. Status Breakdown
     status_stats = db.session.query(
         StudentActivity.status, func.count(StudentActivity.id)
@@ -665,6 +671,7 @@ def admin_stats():
         total_students=total_students,
         total_certificates=total_certificates,
         participating_students=participating_students,
+        total_unique_activities=total_unique_activities, # New
         status_counts=status_counts,
         dept_stats=dept_stats,
         dept_overview=dept_overview, # New
@@ -834,6 +841,10 @@ def admin_export_students():
     output.headers["Content-Disposition"] = "attachment; filename=admin_students.csv"
     output.headers["Content-type"] = "text/csv"
     return output
+
+@bp.route('/faculty/review/<int:act_id>')
+@role_required('faculty', 'admin')
+def review_request(act_id):
     activity = StudentActivity.query.get_or_404(act_id)
     # Optional: Check if assigned to this faculty
     if current_user.role == 'faculty' and activity.assigned_reviewer_id and activity.assigned_reviewer_id != current_user.id:
@@ -890,8 +901,19 @@ def reject_request(act_id):
 @bp.route('/admin/users')
 @role_required('admin')
 def admin_users():
-    users = User.query.order_by(User.created_at.desc()).all()
-    return render_template('admin_users.html', users=users)
+    search_query = request.args.get('search')
+    query = User.query
+    
+    if search_query:
+        query = query.filter(or_(
+            User.full_name.ilike(f'%{search_query}%'),
+            User.email.ilike(f'%{search_query}%'),
+            User.institution_id.ilike(f'%{search_query}%'),
+            User.department.ilike(f'%{search_query}%')
+        ))
+        
+    users = query.order_by(User.created_at.desc()).all()
+    return render_template('admin_users.html', users=users, search_query=search_query)
 
 @bp.route('/admin/users/create', methods=['POST'])
 @role_required('admin')
