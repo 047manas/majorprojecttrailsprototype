@@ -63,7 +63,9 @@ class StudentActivity(db.Model):
     custom_category = db.Column(db.String(100), nullable=True)
     
     title = db.Column(db.String(200), nullable=False)
-    issuer_name = db.Column(db.String(200), nullable=True)
+    organizer = db.Column(db.String(200), nullable=True) # New: Organizer Name
+    issuer_name = db.Column(db.String(200), nullable=True) # Legacy? Can map to organizer
+    issue_date = db.Column(db.Date, nullable=True) # New: Date of Issue
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)
     

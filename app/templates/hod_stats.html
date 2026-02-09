@@ -11,7 +11,7 @@
 
 <body>
 
-    <!-- Navigation (Simplified from existing templates) -->
+    <!-- Navigation -->
     <nav class="navbar navbar-light">
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <div class="navbar-brand">📜 Certificate Verification</div>
@@ -29,13 +29,24 @@
                 <h2>{{ current_user.department }} Department Statistics</h2>
                 <p class="text-muted">Analytics for Head of Department</p>
             </div>
+            <div class="btn-group">
+                <a href="{{ url_for('main.hod_export_certificates', **request.args) }}"
+                    class="btn btn-sm btn-outline-success">Export Certificates</a>
+                <a href="{{ url_for('main.hod_export_students', **request.args) }}"
+                    class="btn btn-sm btn-outline-primary">Export Students</a>
+            </div>
         </div>
 
         <!-- Filters -->
-        <div class="card mb-4" style="background-color: #f8f9fa; border: 1px solid #e3e6f0;">
+        <div class="card mb-4" style="background-color: #f8f9fa;">
             <div class="card-body">
                 <form method="get" class="row g-3">
                     <div class="col-md-3">
+                        <label class="form-label">Search</label>
+                        <input type="text" name="search" class="form-control" placeholder="Name or Roll No"
+                            value="{{ request.args.get('search', '') }}">
+                    </div>
+                    <div class="col-md-2">
                         <label class="form-label">Activity Type</label>
                         <select name="activity_type" class="form-control">
                             <option value="">All Types</option>
@@ -45,10 +56,10 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <label class="form-label">Batch</label>
                         <select name="batch_year" class="form-control">
-                            <option value="">All Batches</option>
+                            <option value="">All</option>
                             {% for batch in batches %}
                             <option value="{{ batch }}" {% if request.args.get('batch_year')==batch %}selected{% endif
                                 %}>{{ batch }}</option>
@@ -72,13 +83,9 @@
                         <input type="date" name="start_date" class="form-control"
                             value="{{ request.args.get('start_date', '') }}">
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">End Date</label>
-                        <input type="date" name="end_date" class="form-control"
-                            value="{{ request.args.get('end_date', '') }}">
-                    </div>
-                    <div class="col-md-1 d-flex align-items-end">
+                    <div class="col-md-2 d-flex align-items-end">
                         <button type="submit" class="btn btn-primary w-100">Filter</button>
+                        <a href="{{ url_for('main.hod_stats') }}" class="btn btn-secondary w-50 ms-1">Reset</a>
                     </div>
                 </form>
             </div>
@@ -90,7 +97,17 @@
                 <div class="card text-white bg-primary mb-3">
                     <div class="card-body">
                         <h5 class="card-title">Total Students</h5>
-                        <p class="card-text display-4">{{ total_students }}</p>
+                        <p class="card-text display-6">{{ total_students }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-success mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Participating</h5>
+                        <p class="card-text display-6">{{ total_participating }}</p>
+                        <small>{{ (total_participating / total_students * 100)|round(1) if total_students > 0 else 0
+                            }}%</small>
                     </div>
                 </div>
             </div>
@@ -98,24 +115,16 @@
                 <div class="card text-white bg-info mb-3">
                     <div class="card-body">
                         <h5 class="card-title">Certificates</h5>
-                        <p class="card-text display-4">{{ total_certificates }}</p>
+                        <p class="card-text display-6">{{ total_certificates }}</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card text-white bg-success mb-3">
+                <div class="card text-white bg-secondary mb-3">
                     <div class="card-body">
                         <h5 class="card-title">Verified</h5>
-                        <p class="card-text display-4">{{ status_counts.get('faculty_verified', 0) +
+                        <p class="card-text display-6">{{ status_counts.get('faculty_verified', 0) +
                             status_counts.get('auto_verified', 0) }}</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-warning mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Pending</h5>
-                        <p class="card-text display-4">{{ status_counts.get('pending', 0) }}</p>
                     </div>
                 </div>
             </div>
@@ -123,7 +132,7 @@
 
         <!-- Charts -->
         <div class="row mb-4">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="card h-100">
                     <div class="card-header">Activity Types</div>
                     <div class="card-body">
@@ -131,45 +140,93 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="card h-100">
-                    <div class="card-header">Batch-wise Participation</div>
+                    <div class="card-header">Batch Distribution</div>
                     <div class="card-body">
                         <canvas id="batchChart"></canvas>
                     </div>
                 </div>
             </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">Monthly Trend</div>
+                    <div class="card-body">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- Recent Activity -->
+        <!-- Student Participation Table -->
         <div class="card mb-4">
-            <div class="card-header">Recent Approved Certificates</div>
+            <div class="card-header">Student Participation</div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover table-sm">
                         <thead>
                             <tr>
                                 <th>Student</th>
-                                <th>Activity</th>
-                                <th>Date Approved</th>
-                                <th>Status</th>
+                                <th>Roll No</th>
+                                <th>Batch</th>
+                                <th>Total Certs</th>
+                                <th>Approved</th>
+                                <th>Last Activity</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for act in recent_activities %}
+                            {% for s in student_stats %}
                             <tr>
-                                <td>{{ act.student.full_name }} <small class="text-muted">({{ act.student.institution_id
-                                        }})</small></td>
-                                <td>{{ act.title }} <span class="badge bg-secondary">{{ act.activity_type.name if
-                                        act.activity_type else act.custom_category }}</span></td>
-                                <td>{{ act.approved_at.strftime('%Y-%m-%d') if act.approved_at else 'N/A' }}</td>
-                                <td>
-                                    <span class="badge bg-success">Verified</span>
-                                </td>
+                                <td>{{ s.full_name }}</td>
+                                <td>{{ s.institution_id }}</td>
+                                <td>{{ s.batch_year }}</td>
+                                <td>{{ s.total_certs }}</td>
+                                <td>{{ s.approved_certs }}</td>
+                                <td>{{ s.last_activity }}</td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="4" class="text-center">No recent approved activities found.</td>
+                                <td colspan="6" class="text-center text-muted">No students found with matching
+                                    activities.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Overview Table -->
+        <div class="card mb-4">
+            <div class="card-header">Activity Overview</div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Type</th>
+                                <th>Organizer</th>
+                                <th>Participants</th>
+                                <th>Approved/Pending/Rejected</th>
+                                <th>Date Range</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in activity_overview %}
+                            <tr>
+                                <td>{{ a.title }}</td>
+                                <td>{{ a.type_name }}</td>
+                                <td>{{ a.organizer or 'N/A' }}</td>
+                                <td>{{ a.participants }}</td>
+                                <td>
+                                    <span class="badge bg-success">{{ a.approved_count }}</span>
+                                    <span class="badge bg-warning">{{ a.pending_count }}</span>
+                                    <span class="badge bg-danger">{{ a.rejected_count }}</span>
+                                </td>
+                                <td>
+                                    <small>{{ a.start_date }} to {{ a.end_date }}</small>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -181,40 +238,46 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // Activity Type Chart
             const typeCtx = document.getElementById('typeChart').getContext('2d');
-            const typeData = {
-                labels: [{% for name, count in type_stats %}"{{ name }}", {% endfor %}],
+            new Chart(typeCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [{% for name, count in type_stats %}"{{ name }}", {% endfor %}],
             datasets: [{
-                label: '# of Certificates',
                 data: [{% for name, count in type_stats %}{{ count }}, {% endfor %}],
-            backgroundColor: 'rgba(54, 162, 235, 0.6)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            borderWidth: 1
-            }]
-        };
-        new Chart(typeCtx, {
-            type: 'bar',
-            data: typeData,
-            options: { scales: { y: { beginAtZero: true } } }
+            backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
         });
 
-        // Batch Chart
         const batchCtx = document.getElementById('batchChart').getContext('2d');
-        const batchData = {
-            labels: [{% for batch, count in batch_stats %}"{{ batch }}", {% endfor %}],
-        datasets: [{
-            label: 'Certificates per Batch',
-            data: [{% for batch, count in batch_stats %}{{ count }}, {% endfor %}],
-            backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
-            }]
-        };
         new Chart(batchCtx, {
             type: 'bar',
-            data: batchData,
-            options: { scales: { y: { beginAtZero: true } } }
+            data: {
+                labels: [{% for batch, count in batch_stats %}"{{ batch }}", {% endfor %}],
+            datasets: [{
+                label: 'Certificates',
+                data: [{% for batch, count in batch_stats %}{{ count }}, {% endfor %}],
+            backgroundColor: '#4e73df'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: [{% for row in trend_stats %}"{{ row.month|int }}/{{ row.year|int }}",{% endfor %}],
+            datasets: [{
+                label: 'Submissions',
+                data: [{% for row in trend_stats %}{{ row[2] }}, {% endfor %}],
+            borderColor: '#f6c23e',
+            fill: false
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
         });
     });
     </script>

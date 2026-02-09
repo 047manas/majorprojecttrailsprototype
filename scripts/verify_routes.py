@@ -7,6 +7,8 @@ from app.models import User
 from flask import url_for
 
 app = create_app()
+app.config['DEBUG'] = True
+app.config['TESTING'] = True
 
 def test_routes():
     with app.test_client() as client:
@@ -39,10 +41,16 @@ def test_routes():
             res = client.get('/admin/stats')
             print(f"Admin -> /admin/stats: {res.status_code}")
             if res.status_code != 200:
-                print(f"Error Response: {res.text}") # Print traceback if debug mode
+                print(f"Error Response: {res.get_data(as_text=True)[:500]}") # Print traceback if debug mode
 
-            res = client.get('/admin/stats/export')
-            print(f"Admin -> /admin/stats/export: {res.status_code}")
+            res = client.get('/admin/stats/export-certificates')
+            print(f"Admin -> /admin/stats/export-certificates: {res.status_code}")
+            
+            res = client.get('/admin/stats/export-departments')
+            print(f"Admin -> /admin/stats/export-departments: {res.status_code}")
+
+            res = client.get('/admin/stats/students')
+            print(f"Admin -> /admin/stats/students: {res.status_code}")
 
 if __name__ == "__main__":
     try:
