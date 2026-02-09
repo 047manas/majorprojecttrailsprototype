@@ -9,7 +9,7 @@ from flask import Blueprint, request, render_template, flash, redirect, url_for,
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
-from sqlalchemy import func, case, distinct, or_
+from sqlalchemy import or_, and_, func, desc, case, distinct, extract
 
 # --- Imports from Modules ---
 from app.models import db, User, ActivityType, StudentActivity
@@ -239,9 +239,274 @@ def faculty_dashboard():
     
     return render_template('faculty.html', pending_requests=pending_activities)
 
-@bp.route('/faculty/review/<int:act_id>')
-@role_required('faculty', 'admin')
-def review_request(act_id):
+@bp.route('/hod/stats')
+@role_required('faculty')
+def hod_stats():
+    if current_user.position != 'hod':
+        abort(403)
+        
+    dept = current_user.department
+    if not dept:
+        flash('Department not assigned to HOD account.', 'error')
+        return redirect(url_for('main.index'))
+
+    # Filters
+    activity_type_id = request.args.get('activity_type')
+    batch_year = request.args.get('batch_year')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    status_filter = request.args.get('status')
+
+    def apply_hod_filters(query):
+        # Join User to filter by department (redundant if query starts with User but good for safety)
+        # Actually most queries will start with StudentActivity
+        query = query.join(User, StudentActivity.student_id == User.id).filter(User.department == dept)
+        
+        if activity_type_id:
+            query = query.filter(StudentActivity.activity_type_id == activity_type_id)
+        if batch_year:
+            # User table already joined
+            query = query.filter(User.batch_year == batch_year)
+        if start_date:
+            query = query.filter(StudentActivity.created_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+        if end_date:
+            query = query.filter(StudentActivity.created_at <= datetime.strptime(end_date, '%Y-%m-%d'))
+        if status_filter:
+            query = query.filter(StudentActivity.status == status_filter)
+        return query
+
+    # 1. KPIs
+    # Total Students in Dept
+    total_students = User.query.filter_by(role='student', department=dept).count()
+    
+    # Total Certificates (filtered)
+    cert_q = db.session.query(func.count(StudentActivity.id))
+    cert_q = apply_hod_filters(cert_q)
+    total_certificates = cert_q.scalar() or 0
+    
+    # Status Breakdown
+    status_stats = db.session.query(
+        StudentActivity.status, func.count(StudentActivity.id)
+    ).select_from(StudentActivity).join(User, StudentActivity.student_id == User.id).filter(User.department == dept)
+    
+    # Apply other filters to status breakdown? Usually yes, to see "pending in 2023" etc.
+    if activity_type_id:
+        status_stats = status_stats.filter(StudentActivity.activity_type_id == activity_type_id)
+    if batch_year:
+        status_stats = status_stats.filter(User.batch_year == batch_year)
+    if start_date:
+        status_stats = status_stats.filter(StudentActivity.created_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        status_stats = status_stats.filter(StudentActivity.created_at <= datetime.strptime(end_date, '%Y-%m-%d'))
+        
+    status_stats = status_stats.group_by(StudentActivity.status).all()
+    status_counts = {s: c for s, c in status_stats}
+    
+    # Activity Type Breakdown
+    type_stats = db.session.query(
+        ActivityType.name, func.count(StudentActivity.id)
+    ).select_from(StudentActivity).join(User).filter(User.department == dept).outerjoin(ActivityType).group_by(ActivityType.name).all()
+    # (Note: simpler query for charts, maybe don't apply all filters to keep context or apply if needed. Let's apply filters for consistency)
+    
+    # Batch Breakdown
+    batch_stats = db.session.query(
+        User.batch_year, func.count(StudentActivity.id)
+    ).select_from(StudentActivity).join(User).filter(User.department == dept).group_by(User.batch_year).all()
+
+    # Recent Activity (Last 10 Approved)
+    recent_q = StudentActivity.query.join(User).filter(
+        User.department == dept,
+        StudentActivity.status == 'faculty_verified'
+    ).order_by(StudentActivity.approved_at.desc().nullslast(), StudentActivity.updated_at.desc()).limit(10)
+    recent_activities = recent_q.all()
+
+    # Dropdown Options
+    activity_types = ActivityType.query.all()
+    batches = db.session.query(User.batch_year).filter(User.department == dept, User.batch_year != None).distinct().all()
+    batches = [b[0] for b in batches]
+
+    return render_template('hod_stats.html',
+        total_students=total_students,
+        total_certificates=total_certificates,
+        status_counts=status_counts,
+        type_stats=type_stats,
+        batch_stats=batch_stats,
+        recent_activities=recent_activities,
+        activity_types=activity_types,
+        batches=batches
+    )
+
+@bp.route('/admin/stats')
+@role_required('admin')
+def admin_stats():
+    # Filters
+    dept = request.args.get('department')
+    activity_type_id = request.args.get('activity_type')
+    batch_year = request.args.get('batch_year')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    status_filter = request.args.get('status')
+
+    def apply_admin_filters(query):
+        # Always join User for dept/batch filtering availability
+        # Use outerjoin if not filtering by user fields to include orphan activities? 
+        # No, activities must have a student. Inner join is safe.
+        query = query.join(User, StudentActivity.student_id == User.id)
+        
+        if dept:
+            query = query.filter(User.department == dept)
+        if activity_type_id:
+            query = query.filter(StudentActivity.activity_type_id == activity_type_id)
+        if batch_year:
+            query = query.filter(User.batch_year == batch_year)
+        if start_date:
+            query = query.filter(StudentActivity.created_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+        if end_date:
+            query = query.filter(StudentActivity.created_at <= datetime.strptime(end_date, '%Y-%m-%d'))
+        if status_filter:
+            query = query.filter(StudentActivity.status == status_filter)
+        return query
+
+    # 1. Global KPIs
+    # Total Students
+    student_q = User.query.filter_by(role='student')
+    if dept:
+        student_q = student_q.filter_by(department=dept)
+    if batch_year:
+        student_q = student_q.filter_by(batch_year=batch_year)
+    total_students = student_q.count()
+
+    # Total Certificates & Participating
+    base_q = db.session.query(StudentActivity)
+    base_q = apply_admin_filters(base_q)
+    total_certificates = base_q.count()
+    
+    # Participating Students (distinct)
+    part_q = db.session.query(func.current_date()).select_from(StudentActivity) # dummy select
+    part_q = apply_admin_filters(db.session.query(distinct(StudentActivity.student_id)))
+    participating_students = part_q.count()
+
+    # 2. Status Breakdown
+    status_stats = db.session.query(
+        StudentActivity.status, func.count(StudentActivity.id)
+    ).select_from(StudentActivity)
+    status_stats = apply_admin_filters(status_stats).group_by(StudentActivity.status).all()
+    status_counts = {s: c for s, c in status_stats}
+
+    # 3. Department Breakdown
+    dept_stats = db.session.query(
+        User.department, 
+        func.count(StudentActivity.id).label('cert_count'),
+        func.count(distinct(StudentActivity.student_id)).label('student_count')
+    ).select_from(StudentActivity)
+    # Apply filters EXCEPT department to see comparison? 
+    # Usually dashboard filters apply globally. If user selects Dept=CSE, showing other depts is confusing.
+    # So we apply filters.
+    dept_stats = apply_admin_filters(dept_stats).group_by(User.department).all()
+
+    # 4. Activity Type Breakdown
+    type_stats = db.session.query(
+        ActivityType.name, func.count(StudentActivity.id)
+    ).select_from(StudentActivity).outerjoin(ActivityType)
+    type_stats = apply_admin_filters(type_stats).group_by(ActivityType.name).all()
+
+    # 5. Monthly Trend (Last 12 Months)
+    # Postgres specific: extract('month', ...). 
+    # SQLite/Postgres compatible: generic extract or func.to_char
+    # Since config says Postgres, use extract or to_char.
+    # Let's use generic extract('year'), extract('month')
+    trend_stats = db.session.query(
+        func.extract('year', StudentActivity.created_at).label('year'),
+        func.extract('month', StudentActivity.created_at).label('month'),
+        func.count(StudentActivity.id)
+    ).select_from(StudentActivity)
+    trend_stats = apply_admin_filters(trend_stats).group_by('year', 'month').order_by('year', 'month').all()
+    # Post-process to ensure last 12 months format "Jan 2023"
+    
+    # Dropdowns
+    departments = db.session.query(User.department).filter(User.department != None).distinct().all()
+    departments = [d[0] for d in departments]
+    activity_types = ActivityType.query.all()
+    batches = db.session.query(User.batch_year).filter(User.batch_year != None).distinct().all()
+    batches = [b[0] for b in batches]
+
+    return render_template('admin_stats.html',
+        total_students=total_students,
+        total_certificates=total_certificates,
+        participating_students=participating_students,
+        status_counts=status_counts,
+        dept_stats=dept_stats,
+        type_stats=type_stats,
+        trend_stats=trend_stats,
+        departments=departments,
+        activity_types=activity_types,
+        batches=batches
+    )
+
+@bp.route('/admin/stats/export')
+@role_required('admin')
+def admin_stats_export():
+    from io import StringIO
+    import csv 
+
+    # Re-implement filters logic (DRY would be better but keeping simple for now)
+    dept = request.args.get('department')
+    activity_type_id = request.args.get('activity_type')
+    batch_year = request.args.get('batch_year')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    status_filter = request.args.get('status')
+
+    query = db.session.query(
+        User.full_name,
+        User.department,
+        User.batch_year,
+        StudentActivity.title,
+        ActivityType.name.label('type_name'),
+        StudentActivity.custom_category,
+        StudentActivity.created_at,
+        StudentActivity.status,
+        StudentActivity.approved_at,
+        User.institution_id
+    ).join(User, StudentActivity.student_id == User.id).outerjoin(ActivityType, StudentActivity.activity_type_id == ActivityType.id)
+
+    if dept:
+        query = query.filter(User.department == dept)
+    if activity_type_id:
+        query = query.filter(StudentActivity.activity_type_id == activity_type_id)
+    if batch_year:
+        query = query.filter(User.batch_year == batch_year)
+    if start_date:
+        query = query.filter(StudentActivity.created_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        query = query.filter(StudentActivity.created_at <= datetime.strptime(end_date, '%Y-%m-%d'))
+    if status_filter:
+        query = query.filter(StudentActivity.status == status_filter)
+
+    results = query.all()
+
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Student Name', 'ID', 'Department', 'Batch', 'Activity Title', 'Type', 'Category', 'Created Date', 'Status', 'Approved Date'])
+    
+    for row in results:
+        cw.writerow([
+            row.full_name,
+            row.institution_id,
+            row.department,
+            row.batch_year,
+            row.title,
+            row.type_name if row.type_name else 'Other',
+            row.custom_category,
+            row.created_at.strftime('%Y-%m-%d'),
+            row.status,
+            row.approved_at.strftime('%Y-%m-%d') if row.approved_at else ''
+        ])
+
+    output = make_response(si.getvalue())
+    output.headers["Content-Disposition"] = "attachment; filename=admin_stats_export.csv"
+    output.headers["Content-type"] = "text/csv"
+    return output
     activity = StudentActivity.query.get_or_404(act_id)
     # Optional: Check if assigned to this faculty
     if current_user.role == 'faculty' and activity.assigned_reviewer_id and activity.assigned_reviewer_id != current_user.id:

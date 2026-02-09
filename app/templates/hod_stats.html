@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HOD Dashboard - Department Stats</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    <!-- Navigation (Simplified from existing templates) -->
+    <nav class="navbar navbar-light">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="navbar-brand">📜 Certificate Verification</div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.faculty_dashboard') }}" class="btn btn-sm btn-outline-secondary">Faculty
+                    Dashboard</a>
+                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2>{{ current_user.department }} Department Statistics</h2>
+                <p class="text-muted">Analytics for Head of Department</p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-4" style="background-color: #f8f9fa; border: 1px solid #e3e6f0;">
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Activity Type</label>
+                        <select name="activity_type" class="form-control">
+                            <option value="">All Types</option>
+                            {% for type in activity_types %}
+                            <option value="{{ type.id }}" {% if request.args.get('activity_type')==type.id|string
+                                %}selected{% endif %}>{{ type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Batch</label>
+                        <select name="batch_year" class="form-control">
+                            <option value="">All Batches</option>
+                            {% for batch in batches %}
+                            <option value="{{ batch }}" {% if request.args.get('batch_year')==batch %}selected{% endif
+                                %}>{{ batch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-control">
+                            <option value="">All Statuses</option>
+                            <option value="pending" {% if request.args.get('status')=='pending' %}selected{% endif %}>
+                                Pending</option>
+                            <option value="faculty_verified" {% if request.args.get('status')=='faculty_verified'
+                                %}selected{% endif %}>Verified</option>
+                            <option value="rejected" {% if request.args.get('status')=='rejected' %}selected{% endif %}>
+                                Rejected</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" name="start_date" class="form-control"
+                            value="{{ request.args.get('start_date', '') }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">End Date</label>
+                        <input type="date" name="end_date" class="form-control"
+                            value="{{ request.args.get('end_date', '') }}">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-white bg-primary mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Students</h5>
+                        <p class="card-text display-4">{{ total_students }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-info mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Certificates</h5>
+                        <p class="card-text display-4">{{ total_certificates }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-success mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Verified</h5>
+                        <p class="card-text display-4">{{ status_counts.get('faculty_verified', 0) +
+                            status_counts.get('auto_verified', 0) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-warning mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Pending</h5>
+                        <p class="card-text display-4">{{ status_counts.get('pending', 0) }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">Activity Types</div>
+                    <div class="card-body">
+                        <canvas id="typeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">Batch-wise Participation</div>
+                    <div class="card-body">
+                        <canvas id="batchChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card mb-4">
+            <div class="card-header">Recent Approved Certificates</div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Activity</th>
+                                <th>Date Approved</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for act in recent_activities %}
+                            <tr>
+                                <td>{{ act.student.full_name }} <small class="text-muted">({{ act.student.institution_id
+                                        }})</small></td>
+                                <td>{{ act.title }} <span class="badge bg-secondary">{{ act.activity_type.name if
+                                        act.activity_type else act.custom_category }}</span></td>
+                                <td>{{ act.approved_at.strftime('%Y-%m-%d') if act.approved_at else 'N/A' }}</td>
+                                <td>
+                                    <span class="badge bg-success">Verified</span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">No recent approved activities found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Activity Type Chart
+            const typeCtx = document.getElementById('typeChart').getContext('2d');
+            const typeData = {
+                labels: [{% for name, count in type_stats %}"{{ name }}", {% endfor %}],
+            datasets: [{
+                label: '# of Certificates',
+                data: [{% for name, count in type_stats %}{{ count }}, {% endfor %}],
+            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+            }]
+        };
+        new Chart(typeCtx, {
+            type: 'bar',
+            data: typeData,
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+
+        // Batch Chart
+        const batchCtx = document.getElementById('batchChart').getContext('2d');
+        const batchData = {
+            labels: [{% for batch, count in batch_stats %}"{{ batch }}", {% endfor %}],
+        datasets: [{
+            label: 'Certificates per Batch',
+            data: [{% for batch, count in batch_stats %}{{ count }}, {% endfor %}],
+            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+            }]
+        };
+        new Chart(batchCtx, {
+            type: 'bar',
+            data: batchData,
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+    });
+    </script>
+</body>
+
+</html>

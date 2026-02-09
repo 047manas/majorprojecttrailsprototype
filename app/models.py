@@ -20,6 +20,7 @@ class User(UserMixin, db.Model):
     # Extended Fields
     full_name = db.Column(db.String(100), nullable=False, default="Unknown")
     department = db.Column(db.String(100), nullable=True) # For Faculty AND Students
+    batch_year = db.Column(db.String(20), nullable=True) # e.g. "2022-2026"
     
     # Generic ID: Roll Number (Student) or Employee ID (Faculty)
     institution_id = db.Column(db.String(64), unique=True, nullable=True)
@@ -90,6 +91,7 @@ class StudentActivity(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    approved_at = db.Column(db.DateTime, nullable=True)
     
     prev_activity_id = db.Column(db.Integer, db.ForeignKey('student_activities.id'), nullable=True)
     
