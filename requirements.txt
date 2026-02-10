@@ -8,3 +8,4 @@ werkzeug
 xhtml2pdf
 opencv-python
 Pillow
+pytesseract
