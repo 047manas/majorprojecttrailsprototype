@@ -2377,7 +2377,7 @@ def api_insights_departments():
     Section C: Level 1 - Department bar chart
     """
     from flask import jsonify
-    from sqlalchemy import func, case, distinct
+    from sqlalchemy import func, case, distinct, cast, String
     
     metric = request.args.get('metric', 'students')  # 'students' or 'certificates'
     
@@ -2406,7 +2406,7 @@ def api_insights_departments():
         func.count(StudentActivity.id).label('total_certs'),
         func.sum(case((StudentActivity.status.in_(['faculty_verified', 'auto_verified']), 1), else_=0)).label('approved_certs'),
         func.count(distinct(func.concat(StudentActivity.title, '-', StudentActivity.organizer, '-', 
-                                         func.coalesce(StudentActivity.issue_date, '')))).label('events_count')
+                                         func.coalesce(cast(StudentActivity.issue_date, String), '')))).label('events_count')
     ).join(User, StudentActivity.student_id == User.id)\
      .filter(User.role == 'student')
     

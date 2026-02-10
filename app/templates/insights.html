@@ -197,6 +197,11 @@
                         <li class="breadcrumb-item active" id="breadcrumbDept"></li>
                     </ol>
                 </nav>
+                <div class="col-auto" id="eventDropdownContainer" style="display:none;">
+                    <select id="eventQuickSelect" class="form-select form-select-sm">
+                        <option value="">-- Jump to Event --</option>
+                    </select>
+                </div>
             </div>
             <div class="card-body">
                 <div class="chart-container" style="height: 350px;">
@@ -437,20 +442,62 @@
                 .catch(err => console.error('Departments error:', err));
         }
 
+        // Populate dropdown with all events
+        function populateEventDropdown(events, dept) {
+            const select = document.getElementById('eventQuickSelect');
+            const container = document.getElementById('eventDropdownContainer');
+
+            if (events && events.length > 10) {  // Only show if many events
+                select.innerHTML = '<option value="">-- Jump to Event --</option>' +
+                    events.map((e, idx) => `<option value="${idx}">${e.title}</option>`).join('');
+
+                select.onchange = function () {
+                    const idx = parseInt(this.value);
+                    if (!isNaN(idx)) {
+                        const event = events[idx];
+                        showEventStudents(dept, event.event_key, event.title);
+                    }
+                };
+
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
         // Events Bar Chart (Level 2)
         function showDepartmentEvents(dept) {
             currentDept = dept;
-            document.getElementById('drilldownTitle').textContent = `${dept} Events`;
+            document.getElementById('drilldownTitle').textContent = `${dept} Events (Click any bar)`;
             document.getElementById('drilldownBreadcrumb').style.display = 'block';
             document.getElementById('breadcrumbDept').textContent = dept;
 
             fetch(`/api/insights/department/${encodeURIComponent(dept)}/events`)
-                .then(r => r.json())
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                })
                 .then(data => {
+                    if (!data.events || data.events.length === 0) {
+                        alert(`No events found for ${dept}`);
+                        loadDepartments();
+                        return;
+                    }
+
                     if (drilldownChart) drilldownChart.destroy();
 
-                    const events = data.events.slice(0, 15); // Top 15 events
-                    const labels = events.map(e => e.title.substring(0, 25) + (e.title.length > 25 ? '...' : ''));
+                    // Show ALL events (remove .slice limitation)
+                    const events = data.events;
+
+                    // Populate Dropdown
+                    populateEventDropdown(events, dept);
+
+                    // Truncate long titles for display
+                    const labels = events.map(e => {
+                        const short = e.title.substring(0, 30);
+                        return e.title.length > 30 ? short + '...' : short;
+                    });
+
                     const values = events.map(e => e.participating_students);
 
                     const ctx = document.getElementById('drilldownChart').getContext('2d');
@@ -461,26 +508,63 @@
                             datasets: [{
                                 label: 'Participating Students',
                                 data: values,
-                                backgroundColor: '#198754'
+                                backgroundColor: '#198754',
+                                hoverBackgroundColor: '#146c43'
                             }]
                         },
                         options: {
-                            indexAxis: 'y',
+                            // ✅ REMOVED indexAxis: 'y' - now VERTICAL bars
                             responsive: true,
                             maintainAspectRatio: false,
                             onClick: (e, elements) => {
                                 if (elements.length > 0) {
                                     const idx = elements[0].index;
-                                    showEventStudents(dept, events[idx].event_key, events[idx].title);
+                                    const event = events[idx];
+                                    console.log('Event clicked:', event);  // Debug log
+                                    showEventStudents(dept, event.event_key, event.title);
                                 }
                             },
                             plugins: {
-                                tooltip: { callbacks: { title: (items) => `Click to view students` } }
+                                tooltip: {
+                                    callbacks: {
+                                        title: (items) => `${events[items[0].dataIndex].title}`,
+                                        afterTitle: () => '👆 Click to view student list',
+                                        label: (item) => `${item.formattedValue} students`
+                                    }
+                                },
+                                legend: { display: false }
+                            },
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        maxRotation: 45,
+                                        minRotation: 45,
+                                        font: { size: 10 }
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    title: { display: true, text: 'Students' }
+                                }
                             }
                         }
                     });
+
+                    // Add a helper message
+                    const chartCard = document.querySelector('#drilldownChart').closest('.card-body');
+                    let helperMsg = chartCard.querySelector('.helper-message');
+                    if (!helperMsg) {
+                        helperMsg = document.createElement('div');
+                        helperMsg.className = 'helper-message alert alert-info mt-2';
+                        chartCard.appendChild(helperMsg);
+                    }
+                    helperMsg.innerHTML = `<i class="bi bi-info-circle"></i> <strong>${events.length} events found.</strong> Click any bar to view students.`;
                 })
-                .catch(err => console.error('Events error:', err));
+                .catch(err => {
+                    console.error('Events API error:', err);
+                    alert(`Failed to load events for ${dept}. Error: ${err.message}`);
+                    loadDepartments();
+                });
         }
 
         function showDepartments() {
@@ -491,13 +575,38 @@
         function showEventStudents(dept, eventKey, title) {
             currentDept = dept;
             currentEventKey = eventKey;
-            document.getElementById('studentModalTitle').textContent = `Students: ${title}`;
+
+            // Open modal immediately with loading state
+            const modal = new bootstrap.Modal(document.getElementById('studentModal'));
+            modal.show();
+
+            // Update title
+            document.getElementById('studentModalTitle').innerHTML = `<div class="spinner-border spinner-border-sm me-2"></div> Loading students for: ${title}`;
+
+            // Clear previous data
+            document.getElementById('studentTableBody').innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border"></div> Loading students...</td></tr>';
+            document.getElementById('studentPagination').innerHTML = '';
+
+            // Reset filters
             document.getElementById('studentSearch').value = '';
             document.getElementById('studentYearFilter').value = '';
             document.getElementById('studentParticipationFilter').value = '';
             document.getElementById('studentCertFilter').value = '';
-            loadEventStudents(1);
-            new bootstrap.Modal(document.getElementById('studentModal')).show();
+
+            // Load data
+            loadEventStudents(1)
+                .then(() => {
+                    // Remove loading spinner from title
+                    document.getElementById('studentModalTitle').textContent = `Students: ${title}`;
+                })
+                .catch(err => {
+                    document.getElementById('studentModalTitle').textContent = `Error loading: ${title}`;
+                    document.getElementById('studentTableBody').innerHTML = `
+                        <tr><td colspan="6" class="text-center text-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Failed to load students: ${err.message}
+                        </td></tr>
+                    `;
+                });
         }
 
         function loadEventStudents(page = 1) {
@@ -509,16 +618,28 @@
                 page: page
             });
 
-            fetch(`/api/insights/department/${encodeURIComponent(currentDept)}/event/${encodeURIComponent(currentEventKey)}/students?${params}`)
-                .then(r => r.json())
+            // Show loading in table
+            document.getElementById('studentTableBody').innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm"></div> Loading...</td></tr>';
+
+            return fetch(`/api/insights/department/${encodeURIComponent(currentDept)}/event/${encodeURIComponent(currentEventKey)}/students?${params}`)
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                })
                 .then(data => {
                     // Update stats
-                    document.getElementById('statParticipated').textContent = `Participated: ${data.stats.participated_submitted}`;
-                    document.getElementById('statNotParticipated').textContent = `Not Participated: ${data.stats.not_participated}`;
-                    document.getElementById('statTotal').textContent = `Total: ${data.total}`;
+                    document.getElementById('statParticipated').textContent = `Participated: ${data.stats.participated_submitted || 0}`;
+                    document.getElementById('statNotParticipated').textContent = `Not Participated: ${data.stats.not_participated || 0}`;
+                    document.getElementById('statTotal').textContent = `Total: ${data.total || 0}`;
 
                     // Render table
                     const tbody = document.getElementById('studentTableBody');
+                    if (!data.students || data.students.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No students found for this event.</td></tr>';
+                        document.getElementById('studentPagination').innerHTML = '';
+                        return;
+                    }
+
                     tbody.innerHTML = data.students.map(s => `
                         <tr>
                             <td>${s.name}</td>
@@ -534,12 +655,20 @@
                             </td>
                             <td>${s.last_updated || '-'}</td>
                         </tr>
-                    `).join('') || '<tr><td colspan="6" class="text-center text-muted">No students found</td></tr>';
+                    `).join('');
 
                     // Render pagination
                     renderPagination(data.page, data.total_pages);
                 })
-                .catch(err => console.error('Students error:', err));
+                .catch(err => {
+                    console.error('Students API error:', err);
+                    document.getElementById('studentTableBody').innerHTML = `
+                        <tr><td colspan="6" class="text-center text-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Error: ${err.message}. Please try again.
+                        </td></tr>
+                    `;
+                    throw err;  // Re-throw for caller to handle
+                });
         }
 
         function getStatusColor(status) {
