@@ -183,8 +183,21 @@ def index():
                         assigned_reviewer_id = hod.id
 
             # --- Create StudentActivity Record ---
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else None
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None
+            start_date = None
+            if start_date_str:
+                try:
+                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    flash("Invalid Start Date format.")
+                    return redirect(request.url)
+            
+            end_date = None
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    flash("Invalid End Date format.")
+                    return redirect(request.url)
 
             # Get Previous Activity (Linked List)
             prev_activity = StudentActivity.query.filter_by(student_id=current_user.id).order_by(StudentActivity.created_at.desc()).first()
@@ -1566,6 +1579,9 @@ def student_portfolio_pdf():
 def verify_public(token):
     activity = StudentActivity.query.filter_by(verification_token=token).first_or_404()
     
+    if not activity.student:
+        return render_template('verify_public.html', error="Associated student record not found.")
+
     if activity.status not in ['faculty_verified', 'auto_verified']:
         return render_template('verify_public.html', error="This record is not fully verified yet.")
         

@@ -1,5 +1,5 @@
 import requests
-from . import analyze, hashstore, queue
+from app.verification import analyze, hashstore, queue
 
 def verify_links(urls, cert_text, ids, candidate_names):
     results = []
