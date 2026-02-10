@@ -2,7 +2,8 @@ import os
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
-    SQLALCHEMY_DATABASE_URI = "postgresql://postgres:root%40123@localhost:5432/smarthub"
+    # Use environment variable for DB URI, fallback to SQLite for local development
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI') or 'sqlite:///smarthub.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Upload Folder

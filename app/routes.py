@@ -16,7 +16,11 @@ from sqlalchemy.orm import aliased
 from app.models import db, User, ActivityType, StudentActivity
 from app.verification import extract, analyze, verify, hashstore, queue
 from app.verification.auto_verifier import run_auto_verification
-from xhtml2pdf import pisa
+
+try:
+    from xhtml2pdf import pisa
+except ImportError:
+    pisa = None
 
 bp = Blueprint('main', __name__)
 
@@ -1565,6 +1569,9 @@ def student_portfolio():
 @bp.route('/student/portfolio.pdf')
 @role_required('student')
 def student_portfolio_pdf():
+    if not pisa:
+        return "PDF generation is currently unavailable due to missing dependencies.", 501
+
     mode = request.args.get('mode', 'full')
     
     query = StudentActivity.query.filter_by(student_id=current_user.id)
