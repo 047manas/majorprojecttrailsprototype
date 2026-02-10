@@ -258,93 +258,82 @@ def hod_stats():
     end_date = request.args.get('end_date')
     status_filter = request.args.get('status')
     search_query = request.args.get('search')
+    
+    # Parse dates safely
+    s_date = None
+    if start_date:
+        try:
+            s_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+            
+    e_date = None
+    if end_date:
+        try:
+            e_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
-    def apply_hod_filters(query):
-        # Join User to filter by department
-        query = query.join(User, StudentActivity.student_id == User.id).filter(User.department == dept)
+    def get_base_query(select_cols=None):
+        if select_cols:
+            q = db.session.query(*select_cols)
+        else:
+            q = db.session.query(StudentActivity)
+            
+        # Always join User for Department filtering
+        q = q.join(User, StudentActivity.student_id == User.id).filter(User.department == dept)
         
         if activity_type_id:
-            query = query.filter(StudentActivity.activity_type_id == activity_type_id)
+            q = q.filter(StudentActivity.activity_type_id == activity_type_id)
         if batch_year:
-            query = query.filter(User.batch_year == batch_year)
-        # Use issue_date if available (new standard), fallback to created_at logic if needed
-        # Prompt says "Date range (by issue_date or approved_at)"
-        # Let's use issue_date for general filtering as it represents the activity time
-        if start_date:
-            query = query.filter(StudentActivity.issue_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-        if end_date:
-            query = query.filter(StudentActivity.issue_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
+            q = q.filter(User.batch_year == batch_year)
+        if s_date:
+            q = q.filter(StudentActivity.issue_date >= s_date)
+        if e_date:
+            q = q.filter(StudentActivity.issue_date <= e_date)
         if status_filter:
-            query = query.filter(StudentActivity.status == status_filter)
+            q = q.filter(StudentActivity.status == status_filter)
         if search_query:
-            # Search by student name or roll number (institution_id)
-            query = query.filter(or_(User.full_name.ilike(f'%{search_query}%'), User.institution_id.ilike(f'%{search_query}%')))
-        return query
+            q = q.filter(or_(User.full_name.ilike(f'%{search_query}%'), User.institution_id.ilike(f'%{search_query}%')))
+        return q
 
     # 1. KPIs
-    # Total Students in Dept
+    # Total Students in Dept (Independent of activity filters)
     total_students = User.query.filter_by(role='student', department=dept).count()
     
     # Participating Students
-    part_q = db.session.query(distinct(StudentActivity.student_id))
-    part_q = apply_hod_filters(part_q)
+    part_q = get_base_query([distinct(StudentActivity.student_id)])
     total_participating = part_q.count()
 
     # Total Certificates (filtered)
-    cert_q = db.session.query(func.count(StudentActivity.id))
-    cert_q = apply_hod_filters(cert_q)
+    cert_q = get_base_query([func.count(StudentActivity.id)])
     total_certificates = cert_q.scalar() or 0
     
     # Status Breakdown
-    status_stats = db.session.query(
-        StudentActivity.status, func.count(StudentActivity.id)
-    ).select_from(StudentActivity)
-    status_stats = apply_hod_filters(status_stats).group_by(StudentActivity.status).all()
+    status_stats_q = get_base_query([StudentActivity.status, func.count(StudentActivity.id)])
+    status_stats = status_stats_q.group_by(StudentActivity.status).all()
     status_counts = {s: c for s, c in status_stats}
     
     # Activity Type Breakdown (Chart)
-    type_stats = db.session.query(
-        ActivityType.name, func.count(StudentActivity.id)
-    ).select_from(StudentActivity).outerjoin(ActivityType)
-    type_stats = apply_hod_filters(type_stats).group_by(ActivityType.name).all()
+    type_q = get_base_query([ActivityType.name, func.count(StudentActivity.id)])
+    type_q = type_q.outerjoin(ActivityType, StudentActivity.activity_type_id == ActivityType.id).group_by(ActivityType.name)
+    type_stats = type_q.all()
     
     # Batch Breakdown (Chart)
-    batch_stats = db.session.query(
-        User.batch_year, func.count(StudentActivity.id)
-    ).select_from(StudentActivity).join(User) # Already joined in filter, but explicit doesn't hurt if we didn't use filter
-    # Actually apply_hod_filters joins User.
-    # We need to construct query carefully.
-    batch_q = db.session.query(User.batch_year, func.count(StudentActivity.id)).select_from(StudentActivity)
-    batch_q = apply_hod_filters(batch_q).group_by(User.batch_year)
-    batch_stats = batch_q.all()
+    batch_q = get_base_query([User.batch_year, func.count(StudentActivity.id)])
+    batch_stats = batch_q.group_by(User.batch_year).all()
 
-    # Monthly Trend (Last 12 Months) - HOD only
-    trend_stats = db.session.query(
+    # Monthly Trend (Last 12 Months)
+    trend_q = get_base_query([
         func.extract('year', StudentActivity.issue_date).label('year'),
         func.extract('month', StudentActivity.issue_date).label('month'),
         func.count(StudentActivity.id)
-    ).select_from(StudentActivity)
-    trend_stats = apply_hod_filters(trend_stats).group_by('year', 'month').order_by('year', 'month').all()
+    ])
+    trend_stats = trend_q.group_by('year', 'month').order_by('year', 'month').all()
 
-    # 2. Student Participation Table
-    # Student Name, Roll No, Batch, Total Certs, Approved Certs, Last Activity Date
-    # We need to query Users then join Activities? Or aggregate from Activities?
-    # Listing ALL students including 0 certs might be heavy if many students. 
-    # Prompt says "Student participation table". Usually implies those who participated OR all. 
-    # "Total students" card implies we know total. Table usually shows relevant ones.
-    # Let's show students who match the filter (so if searching "Smith", show Smith).
-    # If no search, maybe paginated? For MVP, let's show top 50 or those with activities.
-    # But HOD wants to see "students in their department". 
-    # Let's query Users in Dept, then outerjoin activities?
-    # Filters (date, status) apply to activities. If filtering by "Approved", only count Approved certs.
-    
-    # Subquery for counts per student based on current filters?
-    # This is complex in ORM. 
-    # Alternative: Query Activities, group by Student. 
-    # This excludes students with 0 matching activities.
-    
-    # HOD Table 1: Student Participation (Students with activities matching filters)
-    student_stats_q = db.session.query(
+    # 2. Student Participation Table - Students matching filters
+    # Note: Accessing User fields via join
+    student_stats_q = get_base_query([
         User.id,
         User.full_name,
         User.institution_id,
@@ -352,31 +341,11 @@ def hod_stats():
         func.count(StudentActivity.id).label('total_certs'),
         func.sum(case((StudentActivity.status == 'faculty_verified', 1), else_=0)).label('approved_certs'),
         func.max(StudentActivity.issue_date).label('last_activity')
-    ).select_from(User).join(StudentActivity, User.id == StudentActivity.student_id)
-    
-    # Re-apply filters manually because apply_hod_filters assumes StudentActivity base
-    student_stats_q = student_stats_q.filter(User.department == dept)
-    
-    if activity_type_id:
-        student_stats_q = student_stats_q.filter(StudentActivity.activity_type_id == activity_type_id)
-    if batch_year:
-        student_stats_q = student_stats_q.filter(User.batch_year == batch_year)
-    if start_date:
-        student_stats_q = student_stats_q.filter(StudentActivity.issue_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-    if end_date:
-        student_stats_q = student_stats_q.filter(StudentActivity.issue_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
-    if status_filter:
-        student_stats_q = student_stats_q.filter(StudentActivity.status == status_filter)
-    if search_query:
-        student_stats_q = student_stats_q.filter(or_(User.full_name.ilike(f'%{search_query}%'), User.institution_id.ilike(f'%{search_query}%')))
-        
+    ])
     student_stats = student_stats_q.group_by(User.id).all()
 
     # 3. Activity Overview Table
-    # Title, Type, Organizer, Total Participants, Status Counts, Date Range
-    # Group by Title? Titles can be duplicates. Verify prompt: "activity_title... total participants". 
-    # This implies grouping by title.
-    activity_overview_q = db.session.query(
+    activity_overview_q = get_base_query([
         StudentActivity.title,
         func.coalesce(ActivityType.name, StudentActivity.custom_category).label('type_name'),
         StudentActivity.organizer,
@@ -386,9 +355,8 @@ def hod_stats():
         func.sum(case((StudentActivity.status == 'rejected', 1), else_=0)).label('rejected_count'),
         func.min(StudentActivity.issue_date).label('start_date'),
         func.max(StudentActivity.issue_date).label('end_date')
-    ).select_from(StudentActivity).outerjoin(ActivityType)
-    
-    activity_overview_q = apply_hod_filters(activity_overview_q)
+    ])
+    activity_overview_q = activity_overview_q.outerjoin(ActivityType, StudentActivity.activity_type_id == ActivityType.id)
     activity_overview = activity_overview_q.group_by(StudentActivity.title, 'type_name', StudentActivity.organizer).all()
 
     # Dropdown Options
@@ -1080,16 +1048,17 @@ def approve_request(act_id):
     activity.faculty_id = current_user.id
     activity.faculty_comment = comment
     
+    # Pre-fetch student to ensure relationship is loaded for store_approved_hash
+    student = activity.student
+    
     # Generate Verification Token if not exists
     if not activity.verification_token:
         activity.verification_token = secrets.token_urlsafe(16)
-    activity.faculty_id = current_user.id
-    activity.faculty_comment = comment
-    
+        
     if activity.certificate_hash:
          hashstore.store_approved_hash(
             file_hash=activity.certificate_hash,
-            roll_no=activity.student.institution_id,
+            roll_no=student.institution_id,
             filename=activity.certificate_file,
             request_id=activity.id,
             faculty_comment=comment
