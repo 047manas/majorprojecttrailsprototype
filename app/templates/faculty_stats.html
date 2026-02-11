@@ -15,7 +15,7 @@
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <div class="navbar-brand">📊 Dept. Insights: {{ current_user.department }}</div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('main.insights_page') }}" class="btn btn-sm btn-outline-info">📊 Insights</a>
+
                 <a href="{{ url_for('main.faculty_dashboard') }}" class="btn btn-sm btn-outline-primary">Back to
                     Dashboard</a>
                 <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
@@ -27,136 +27,280 @@
 
         <!-- KPIs -->
         <h4 class="mb-3">Overview</h4>
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card text-white bg-primary mb-3 clickable-card" onclick="showStatsModal('participation')"
-                    style="cursor:pointer;" title="Click to see student participation">
-                    <div class="card-body">
-                        <h5 class="card-title">Total Students <small>🔍</small></h5>
-                        <p class="card-text display-6">{{ total_students }}</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-success mb-3 clickable-card" onclick="showStatsModal('activities')"
-                    style="cursor:pointer;" title="Click to see all activities">
-                    <div class="card-body">
-                        <h5 class="card-title">Dept. Events <small>🔍</small></h5>
-                        <p class="card-text display-6">{{ total_events }}</p>
-                        <small>(Click to view)</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-info mb-3 clickable-card" onclick="showStatsModal('verified')"
-                    style="cursor:pointer;" title="Click to see verified certificates">
-                    <div class="card-body">
-                        <h5 class="card-title">Verified Certs <small>🔍</small></h5>
-                        <p class="card-text display-6">{{ status_counts.get('faculty_verified', 0) +
-                            status_counts.get('auto_verified', 0) }}</p>
-                        <small>(Click to view)</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-warning mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Pending</h5>
-                        <p class="card-text display-6">{{ status_counts.get('pending', 0) }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="row">
-            <!-- Event Status Bar Chart -->
-            <div class="col-md-6">
-                <div class="card mb-4">
-                    <div class="card-header">Event Status Breakdown <small class="text-muted">(Click bar to see
-                            participants)</small></div>
-                    <div class="card-body" style="height: 300px;">
-                        <canvas id="eventStatusChart"></canvas>
-                    </div>
-                </div>
-            </div>
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs mb-4" id="facultyTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview"
+                    type="button" role="tab">Overview</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="trends-tab" data-bs-toggle="tab" data-bs-target="#trends" type="button"
+                    role="tab">Trends</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="data-tab" data-bs-toggle="tab" data-bs-target="#data" type="button"
+                    role="tab">Events Data</button>
+            </li>
+        </ul>
 
-            <!-- Recent Activity -->
-            <div class="col-md-6">
-                <div class="card mb-4">
-                    <div class="card-header">Recent Activity (Last 10)</div>
-                    <ul class="list-group list-group-flush" style="max-height: 280px; overflow-y: auto;">
-                        {% for act in recent_activities %}
-                        <li class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>{{ act.student.full_name }}</strong> submitted <em>{{ act.title }}</em>
-                                    <br><small class="text-muted">{{ act.created_at.strftime('%Y-%m-%d') }}</small>
-                                </div>
-                                <span
-                                    class="badge {{ 'bg-success' if act.status == 'faculty_verified' else 'bg-warning' if act.status == 'pending' else 'bg-danger' }}">
-                                    {{ act.status }}
-                                </span>
+        <div class="tab-content" id="facultyTabContent">
+            <!-- Overview Tab -->
+            <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-white bg-primary mb-3 clickable-card"
+                            onclick="showStatsModal('participation')" style="cursor:pointer;"
+                            title="Click to see student participation">
+                            <div class="card-body">
+                                <h5 class="card-title">Total Students <small>🔍</small></h5>
+                                <p class="card-text display-6">{{ total_students }}</p>
                             </div>
-                        </li>
-                        {% else %}
-                        <li class="list-group-item text-muted">No recent activity.</li>
-                        {% endfor %}
-                    </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-success mb-3 clickable-card"
+                            onclick="showStatsModal('activities')" style="cursor:pointer;"
+                            title="Click to see all activities">
+                            <div class="card-body">
+                                <h5 class="card-title">Dept. Events <small>🔍</small></h5>
+                                <p class="card-text display-6">{{ total_events }}</p>
+                                <small>(Click to view)</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-info mb-3 clickable-card" onclick="showStatsModal('verified')"
+                            style="cursor:pointer;" title="Click to see verified certificates">
+                            <div class="card-body">
+                                <h5 class="card-title">Verified Certs <small>🔍</small></h5>
+                                <p class="card-text display-6">{{ status_counts.get('faculty_verified', 0) +
+                                    status_counts.get('auto_verified', 0) }}</p>
+                                <small>(Click to view)</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-warning mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Pending</h5>
+                                <p class="card-text display-6">{{ status_counts.get('pending', 0) }}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Department Events Table -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>Department Events</span>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Event Title</th>
-                                <th>Organizer</th>
-                                <th>Type</th>
-                                <th>Participants</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for evt in events_list %}
-                            <tr>
-                                <td>{{ evt.issue_date }}</td>
-                                <td>{{ evt.title }}</td>
-                                <td>{{ evt.organizer or '-' }}</td>
-                                <td><span class="badge bg-secondary">{{ evt.type_name }}</span></td>
-                                <td>
-                                    {{ evt.verified_count }} / {{ evt.participant_count }}
-                                    <div class="progress" style="height: 5px; width: 50px;">
-                                        <div class="progress-bar bg-success" role="progressbar"
-                                            style="width: {{ (evt.verified_count / evt.participant_count * 100) if evt.participant_count > 0 else 0 }}%">
+                <!-- Interactive Insights Section -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div
+                                class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                                <span>📊 Department Insights</span>
+                                <button class="btn btn-sm btn-light" onclick="resetInsights()">Reset View</button>
+                            </div>
+                            <div class="card-body">
+                                <!-- Breadcrumbs -->
+                                <nav aria-label="breadcrumb" class="mb-3">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item"><a href="#"
+                                                onclick="resetInsights(); return false;">Activity Types</a></li>
+                                        <li class="breadcrumb-item active" id="bread-event" style="display:none">Events
+                                        </li>
+                                    </ol>
+                                </nav>
+
+                                <!-- Level 1: Activity Types -->
+                                <div id="level-1-types">
+                                    <h5 class="card-title text-muted mb-3">Activity Overview</h5>
+                                    <div class="row">
+                                        <div class="col-md-5">
+                                            <div style="height: 250px;">
+                                                <canvas id="typeChart"></canvas>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-7">
+                                            <div class="table-responsive">
+                                                <table class="table table-hover table-sm">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Activity Type</th>
+                                                            <th>Events</th>
+                                                            <th>Certificates</th>
+                                                            <th>Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for t in activity_types %}
+                                                        <tr>
+                                                            <td><strong>{{ t.name }}</strong></td>
+                                                            <td>
+                                                                <span class="badge bg-secondary">{{
+                                                                    type_stats.get(t.name, 0)
+                                                                    }}</span>
+                                                            </td>
+                                                            <td>{{ type_stats.get(t.name, 0) }}</td>
+                                                            <td>
+                                                                <button class="btn btn-sm btn-primary"
+                                                                    onclick="loadTypeEvents({{ t.id }}, '{{ t.name }}')">
+                                                                    View Events
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
                                     </div>
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary"
-                                        onclick="showParticipantsModal('{{ evt.title }}', '{{ evt.organizer or '' }}', '{{ evt.issue_date }}')">
-                                        View
-                                    </button>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6" class="text-center">No events found for this department.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                </div>
+
+                                <!-- Level 2: Events List -->
+                                <div id="level-2-events" style="display:none;">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h5 class="card-title mb-0">Events in <span id="selected-type-name"
+                                                class="text-primary"></span>
+                                        </h5>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="resetInsights()">Back
+                                            to
+                                            Types</button>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover table-sm align-middle">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Title</th>
+                                                    <th>Organizer</th>
+                                                    <th>Date</th>
+                                                    <th>Participants</th>
+                                                    <th>Approved</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="events-table-body">
+                                                <!-- Populated via JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div> <!-- End Overview Tab -->
+
+            <!-- Trends Tab -->
+            <div class="tab-pane fade" id="trends" role="tabpanel" aria-labelledby="trends-tab">
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-graph-up-arrow"></i> Certificates Over Time
+                            </div>
+                            <div class="card-body">
+                                <div style="height: 350px;">
+                                    <canvas id="timeseriesChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-pie-chart"></i> Verification Mode
+                            </div>
+                            <div class="card-body">
+                                <div style="height: 350px;">
+                                    <canvas id="modeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
 
+            <!-- Data Tab -->
+            <div class="tab-pane fade" id="data" role="tabpanel" aria-labelledby="data-tab">
+
+                <!-- Recent Activity (Horizontal Row) -->
+                <div class="card mb-4">
+                    <div class="card-header">Recent Activity (Last 10)</div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                            {% for act in recent_activities %}
+                            <li class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ act.student.full_name }}</strong> submitted <em>{{ act.title }}</em>
+                                        <br><small class="text-muted">{{ act.created_at.strftime('%Y-%m-%d') }}</small>
+                                    </div>
+                                    <span
+                                        class="badge {{ 'bg-success' if act.status == 'faculty_verified' else 'bg-warning' if act.status == 'pending' else 'bg-danger' }}">
+                                        {{ act.status }}
+                                    </span>
+                                </div>
+                            </li>
+                            {% else %}
+                            <li class="list-group-item text-muted">No recent activity.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Department Events Table -->
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Department Events</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Event Title</th>
+                                        <th>Organizer</th>
+                                        <th>Type</th>
+                                        <th>Participants</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for evt in events_list %}
+                                    <tr>
+                                        <td>{{ evt.issue_date }}</td>
+                                        <td>{{ evt.title }}</td>
+                                        <td>{{ evt.organizer or '-' }}</td>
+                                        <td><span class="badge bg-secondary">{{ evt.type_name }}</span></td>
+                                        <td>
+                                            {{ evt.verified_count }} / {{ evt.participant_count }}
+                                            <div class="progress" style="height: 5px; width: 50px;">
+                                                <div class="progress-bar bg-success" role="progressbar"
+                                                    style="width: {{ (evt.verified_count / evt.participant_count * 100) if evt.participant_count > 0 else 0 }}%">
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                onclick="showParticipantsModal('{{ evt.title }}', '{{ evt.organizer or '' }}', '{{ evt.issue_date }}')">
+                                                View
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center">No events found for this department.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div> <!-- End Data Tab -->
+    </div> <!-- End Tab Content -->
     </div>
 
     <!-- Participants Modal -->
@@ -454,44 +598,202 @@
             a.click();
         }
 
-        // Event data for chart
-        const eventsData = [
-            {% for evt in events_list %}
-        {
-            title: "{{ evt.title|e }}",
-                organizer: "{{ evt.organizer or ''|e }}",
-                    date: "{{ evt.issue_date }}",
-                        verified: { { evt.verified_count } },
-            pending: { { evt.participant_count - evt.verified_count } },
-            total: { { evt.participant_count } }
-        },
-        {% endfor %}
-        ];
+        // --- Interactive Insights Logic ---
 
-        // Bar Chart
-        const ctx = document.getElementById('eventStatusChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: eventsData.map(e => e.title.substring(0, 20) + (e.title.length > 20 ? '...' : '')),
-                datasets: [
-                    { label: 'Verified', data: eventsData.map(e => e.verified), backgroundColor: '#1cc88a' },
-                    { label: 'Pending', data: eventsData.map(e => e.pending), backgroundColor: '#f6c23e' }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
-                onClick: (evt, elements) => {
-                    if (elements.length > 0) {
-                        const idx = elements[0].index;
-                        const event = eventsData[idx];
-                        showParticipantsModal(event.title, event.organizer, event.date);
+        let typeChart = null;
+        let activityTypes = {};
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize Type Chart
+            initTypeChart();
+
+            // Tab Event Listeners
+            var triggerTabList = [].slice.call(document.querySelectorAll('#facultyTabs button'))
+            triggerTabList.forEach(function (triggerEl) {
+                var tabTrigger = new bootstrap.Tab(triggerEl)
+                triggerEl.addEventListener('shown.bs.tab', function (event) {
+                    if (event.target.id === 'trends-tab') {
+                        loadTrendsData();
+                    }
+                })
+            })
+        });
+
+        // --- Trends Logic ---
+        let timeseriesChart = null;
+        let modeChart = null;
+
+        function loadTrendsData() {
+            const params = new URLSearchParams(window.location.search);
+            // Append current department not needed as user is faculty
+
+            // 1. Timeseries
+            fetch(`/api/insights/certificates-timeseries?${params.toString()}`)
+                .then(r => r.json())
+                .then(data => {
+                    initTimeseriesChart(data);
+                });
+
+            // 2. Mode Distribution
+            fetch(`/api/insights/certificate-metrics?${params.toString()}`)
+                .then(r => r.json())
+                .then(data => {
+                    initModeChart(data.verification_mode_distribution);
+                });
+        }
+
+        function initTimeseriesChart(data) {
+            if (timeseriesChart) timeseriesChart.destroy();
+            const ctx = document.getElementById('timeseriesChart').getContext('2d');
+            timeseriesChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.months,
+                    datasets: [
+                        { label: 'Submitted', data: data.submitted, borderColor: '#0d6efd', fill: false, tension: 0.3 },
+                        { label: 'Approved', data: data.approved, borderColor: '#198754', fill: false, tension: 0.3 },
+                        { label: 'Rejected', data: data.rejected, borderColor: '#dc3545', fill: false, tension: 0.3 },
+                        { label: 'Pending', data: data.pending, borderColor: '#ffc107', fill: false, tension: 0.3 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function initModeChart(dist) {
+            if (modeChart) modeChart.destroy();
+            const ctx = document.getElementById('modeChart').getContext('2d');
+
+            // Combine auto_verified and faculty_verified per user request
+            const verified = (dist.auto_verified || 0) + (dist.faculty_verified || 0);
+
+            modeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Verified'],
+                    datasets: [{
+                        data: [verified],
+                        backgroundColor: ['#198754'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { usePointStyle: true } },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return `Verified: ${context.parsed} (${dist.auto_verified || 0} auto + ${dist.faculty_verified || 0} manual)`;
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        // Type Data Injection
+        // Faculty template might not have 'activity_types' in context if not passed.
+        // I need to check routes.py 'faculty_dashboard_stats' to be sure.
+        // Assuming it is passed as it is common.
+        const typeData = [
+            {% for t in activity_types %}
+        { id: { { t.id } }, name: "{{ t.name }}" },
+        {% endfor %}
+        ];
+        // And match with stats
+        // The context has `status_counts` and `recent_activities`.
+        // Does it have `type_stats`? I need to check routes.py.
+        // If not, I might need to fetch it or rely on what's available.
+        // Let's assume I'll update routes.py if missing.
+        const typeStats = {
+            {% for name, count in type_stats %}
+        "{{ name }}": { { count } },
+        {% endfor %}
+        };
+
+        function initTypeChart() {
+            const labels = typeData.map(t => t.name);
+            const data = typeData.map(t => typeStats[t.name] || 0);
+
+            if (typeChart) typeChart.destroy();
+
+            typeChart = new Chart(document.getElementById('typeChart'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'My/Dept Events by Type',
+                        data: data,
+                        backgroundColor: '#4e73df'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const idx = elements[0].index;
+                            const type = typeData[idx];
+                            loadTypeEvents(type.id, type.name);
+                        }
+                    }
+                }
+            });
+        }
+
+        function resetInsights() {
+            document.getElementById('level-1-types').style.display = 'block';
+            document.getElementById('level-2-events').style.display = 'none';
+            document.getElementById('bread-event').style.display = 'none';
+        }
+
+        function loadTypeEvents(typeId, typeName) {
+            // UI Update
+            document.getElementById('level-1-types').style.display = 'none';
+            document.getElementById('level-2-events').style.display = 'block';
+            document.getElementById('selected-type-name').textContent = typeName;
+
+            const bread = document.getElementById('bread-event');
+            bread.style.display = 'block';
+            bread.innerHTML = `Events in ${typeName}`;
+            bread.onclick = () => { resetInsights(); return false; };
+
+            // Fetch Data
+            fetch(`/api/activity_type/${typeId}/events`)
+                .then(r => r.json())
+                .then(data => {
+                    const tbody = document.getElementById('events-table-body');
+                    if (!data.events || data.events.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No events found.</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = data.events.map(e => `
+                        <tr>
+                            <td><strong>${e.title}</strong></td>
+                            <td>${e.organizer}</td>
+                            <td>${e.date}</td>
+                            <td>${e.participating_students}</td>
+                            <td><span class="badge bg-success">${e.approved}</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="showParticipantsModal('${e.title}', '${e.organizer}', '${e.date}')">
+                                    View Participants
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+        }
 
         // Modal state
         let currentEvent = { title: '', organizer: '', date: '' };
