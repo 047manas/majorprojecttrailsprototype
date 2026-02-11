@@ -6,7 +6,6 @@ Initializes PostgreSQL database and creates all tables with default admin
 import sys
 import os
 from werkzeug.security import generate_password_hash
-from datetime import datetime
 
 # Add parent dir to path to import app
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -50,62 +49,16 @@ def init_database():
             db.session.add(dr_smith)
             
             # Create HOD CSE: Prof. HOD
-            prof_hod_cse = User(
+            prof_hod = User(
                 email='hod.cse@college.edu',
                 password_hash=generate_password_hash('password'),
                 role='faculty',
                 position='hod',
                 full_name='Prof. HOD CSE',
                 department='CSE',
-                institution_id='FAC_HOD_CSE_01'
+                institution_id='FAC_HOD_01'
             )
-            db.session.add(prof_hod_cse)
-
-            # Create HOD ECE: Prof. HOD ECE
-            prof_hod_ece = User(
-                email='hod.ece@college.edu',
-                password_hash=generate_password_hash('password'),
-                role='faculty',
-                position='hod',
-                full_name='Prof. HOD ECE',
-                department='ECE',
-                institution_id='FAC_HOD_ECE_01'
-            )
-            db.session.add(prof_hod_ece)
-            
-            # Create Students
-            student1 = User(
-                email='student.cse@college.edu',
-                password_hash=generate_password_hash('password'),
-                role='student',
-                full_name='Student CSE',
-                department='CSE',
-                batch_year='2022-2026',
-                institution_id='STU_CSE_01'
-            )
-            db.session.add(student1)
-
-            student2 = User(
-                email='student.ece@college.edu',
-                password_hash=generate_password_hash('password'),
-                role='student',
-                full_name='Student ECE',
-                department='ECE',
-                batch_year='2023-2027',
-                institution_id='STU_ECE_01'
-            )
-            db.session.add(student2)
-
-            student3 = User(
-                email='student.cse2@college.edu',
-                password_hash=generate_password_hash('password'),
-                role='student',
-                full_name='Student CSE 2',
-                department='CSE',
-                batch_year='2022-2026',
-                institution_id='STU_CSE_02'
-            )
-            db.session.add(student3)
+            db.session.add(prof_hod)
             
             db.session.commit()  # Commit to get IDs
             
@@ -122,67 +75,6 @@ def init_database():
             )
             db.session.add(act1)
             db.session.add(act2)
-            db.session.commit()
-
-            # Create Sample Certificates
-            from app.models import StudentActivity
-            from datetime import date, timedelta
-            
-            # 1. Approved CSE Cert (Technical)
-            cert1 = StudentActivity(
-                student_id=student1.id,
-                activity_type_id=act1.id,
-                title="Python Workshop",
-                certificate_file="dummy.pdf",
-                status="faculty_verified",
-                faculty_id=dr_smith.id,
-                approved_at=datetime.utcnow() - timedelta(days=5),
-                created_at=datetime.utcnow() - timedelta(days=10),
-                start_date=date(2023, 1, 10),
-                end_date=date(2023, 1, 12)
-            )
-            db.session.add(cert1)
-
-            # 2. Pending CSE Cert (Sports)
-            cert2 = StudentActivity(
-                student_id=student1.id,
-                activity_type_id=act2.id,
-                title="Intra-College Football",
-                certificate_file="dummy2.pdf",
-                status="pending",
-                created_at=datetime.utcnow() - timedelta(days=2),
-                start_date=date(2023, 2, 15)
-            )
-            db.session.add(cert2)
-
-            # 3. Approved ECE Cert (Technical)
-            cert3 = StudentActivity(
-                student_id=student2.id,
-                activity_type_id=act1.id,
-                title="Robotics Workshop",
-                certificate_file="dummy3.pdf",
-                status="faculty_verified",
-                faculty_id=prof_hod_ece.id,
-                approved_at=datetime.utcnow() - timedelta(days=1),
-                created_at=datetime.utcnow() - timedelta(days=3),
-                start_date=date(2023, 3, 20)
-            )
-            db.session.add(cert3)
-
-            # 4. Rejected ECE Cert
-            cert4 = StudentActivity(
-                student_id=student2.id,
-                activity_type_id=act2.id,
-                title="Invalid Event",
-                certificate_file="dummy4.pdf",
-                status="rejected",
-                faculty_id=prof_hod_ece.id,
-                faculty_comment="Blurry Image",
-                created_at=datetime.utcnow() - timedelta(days=20),
-                start_date=date(2023, 1, 1)
-            )
-            db.session.add(cert4)
-            
             db.session.commit()
             
             print("✅ Default users created successfully!")

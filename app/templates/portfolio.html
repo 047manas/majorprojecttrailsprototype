@@ -14,8 +14,7 @@
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <div class="navbar-brand">📜 My Portfolio</div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('main.student_dashboard') }}" class="btn btn-sm btn-outline-secondary">Back to
-                    Dashboard</a>
+                <a href="{{ url_for('main.index') }}" class="btn btn-sm btn-outline-secondary">Back to Dashboard</a>
                 <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
             </div>
         </div>
@@ -139,8 +138,7 @@
                 {% else %}
                 <div class="text-center text-muted" style="padding: var(--spacing-xl) 0;">
                     <p>No activities recorded yet.</p>
-                    <a href="{{ url_for('main.student_dashboard') }}" class="btn btn-primary">Upload Your First
-                        Certificate</a>
+                    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Upload Your First Certificate</a>
                 </div>
                 {% endif %}
             </div>

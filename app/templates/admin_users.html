@@ -52,11 +52,8 @@
             <div>
                 <a href="{{ url_for('main.admin_activity_types') }}" class="btn btn-outline-primary"
                     style="margin-right: 0.5rem;">Manage Activity Types</a>
-                <a href="{{ url_for('main.admin_stats') }}" class="btn btn-outline-primary"
-                    style="margin-right: 0.5rem;">Global Stats</a>
                 <a href="{{ url_for('main.admin_naac_dashboard') }}" class="btn btn-outline-primary"
                     style="margin-right: 0.5rem;">NAAC Dashboard</a>
-
                 <a href="{{ url_for('main.logout') }}" class="btn btn-danger">Logout</a>
             </div>
         </header>
@@ -129,17 +126,7 @@
         </div>
 
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>Existing Users</span>
-                <form action="{{ url_for('main.admin_users') }}" method="get" class="d-flex" style="gap: 0.5rem;">
-                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Search users..."
-                        value="{{ request.args.get('search', '') }}">
-                    <button type="submit" class="btn btn-sm btn-primary">Search</button>
-                    {% if request.args.get('search') %}
-                    <a href="{{ url_for('main.admin_users') }}" class="btn btn-sm btn-secondary">Clear</a>
-                    {% endif %}
-                </form>
-            </div>
+            <div class="card-header">Existing Users</div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table">
