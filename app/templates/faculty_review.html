@@ -14,7 +14,7 @@
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <div class="navbar-brand">📋 Faculty Dashboard</div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger">Logout</a>
             </div>
         </div>
     </nav>
@@ -24,7 +24,7 @@
         <header>
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <a href="{{ url_for('main.faculty_dashboard') }}" class="btn btn-sm btn-outline-secondary mb-2">←
+                    <a href="{{ url_for('faculty.dashboard') }}" class="btn btn-sm btn-outline-secondary mb-2">←
                         Back to Queue</a>
                     <h1>Certificate Review</h1>
                     <p class="text-muted">Activity #{{ activity.id }} | Student: {{ activity.student.full_name }}</p>
@@ -96,7 +96,7 @@
                                 File</label>
                             <div>
                                 <small class="text-muted d-block mb-2">{{ activity.certificate_file }}</small>
-                                <a href="{{ url_for('main.serve_upload', filename=activity.certificate_file) }}"
+                                <a href="{{ url_for('student.serve_upload', filename=activity.certificate_file) }}"
                                     target="_blank" class="btn btn-sm btn-outline-primary">
                                     📄 View Certificate PDF
                                 </a>
@@ -140,7 +140,8 @@
             <div class="card-body">
                 <div class="grid-2">
                     <!-- Approve Form -->
-                    <form action="{{ url_for('main.approve_request', act_id=activity.id) }}" method="post">
+                    <form action="{{ url_for('faculty.approve_request', act_id=activity.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                         <div class="form-group">
                             <label for="faculty_comment_approve">
                                 <strong>Approval Comments</strong>
@@ -157,7 +158,8 @@
                     </form>
 
                     <!-- Reject Form -->
-                    <form action="{{ url_for('main.reject_request', act_id=activity.id) }}" method="post">
+                    <form action="{{ url_for('faculty.reject_request', act_id=activity.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                         <div class="form-group">
                             <label for="faculty_comment_reject">
                                 <strong>Rejection Reason</strong>
@@ -178,7 +180,7 @@
 
         <!-- Back Link -->
         <div style="margin-top: var(--spacing-xl); text-align: center;">
-            <a href="{{ url_for('main.faculty_dashboard') }}" class="text-muted">← Back to Verification Queue</a>
+            <a href="{{ url_for('faculty.dashboard') }}" class="text-muted">← Back to Verification Queue</a>
         </div>
     </div>
 </body>

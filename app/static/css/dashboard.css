@@ -1,0 +1,146 @@
+/* Dashboard CSS (Modern Redesign) */
+:root {
+    --primary: #4e73df;
+    --success: #1cc88a;
+    --info: #36b9cc;
+    --warning: #f6c23e;
+    --danger: #e74a3b;
+    --secondary: #858796;
+    --light: #f8f9fc;
+    --dark: #5a5c69;
+}
+
+body {
+    background-color: var(--light);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--dark);
+}
+
+/* === KPI Grid === */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 992px) {
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 576px) {
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.kpi-card {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    border-left: 0.25rem solid var(--primary);
+    /* Default Accent */
+    transition: transform 0.2s;
+    height: 100%;
+}
+
+.kpi-card:hover {
+    transform: translateY(-3px);
+}
+
+.kpi-card.purple {
+    border-left-color: var(--primary);
+}
+
+.kpi-card.success {
+    border-left-color: var(--success);
+}
+
+.kpi-card.info {
+    border-left-color: var(--info);
+}
+
+.kpi-card.warning {
+    border-left-color: var(--warning);
+}
+
+.kpi-card.danger {
+    border-left-color: var(--danger);
+}
+
+.kpi-title {
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.kpi-value {
+    color: var(--dark);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* === Chart Panels === */
+.chart-panel {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    height: 100%;
+    border: none;
+}
+
+.chart-header {
+    border-bottom: 1px solid #e3e6f0;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.chart-container-fixed {
+    position: relative;
+    height: 300px;
+    /* Reduced height for cleaner look */
+    width: 100%;
+}
+
+/* === Filter Bar === */
+.filter-card {
+    border: none;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    border-radius: 0.5rem;
+}
+
+.filter-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--secondary);
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+
+/* === Table === */
+.table-card {
+    border: none;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: #f8f9fc;
+    color: var(--primary);
+    font-weight: 700;
+    border-bottom: 2px solid #e3e6f0;
+}
+
+/* === General Utils === */
+.section-spacing {
+    margin-bottom: 2rem;
+}

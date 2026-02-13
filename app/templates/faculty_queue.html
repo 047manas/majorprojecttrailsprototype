@@ -14,7 +14,7 @@
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <div class="navbar-brand">📋 Faculty Dashboard</div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger">Logout</a>
             </div>
         </div>
     </nav>
@@ -88,8 +88,8 @@
                             <span class="status-badge status-pending">Pending Review</span>
                         </td>
                         <td class="action-col">
-                            <a href="{{ url_for('main.serve_upload', filename=req.certificate_file) }}" target="_blank"
-                                class="btn btn-sm btn-primary">
+                            <a href="{{ url_for('student.serve_upload', filename=req.certificate_file) }}"
+                                target="_blank" class="btn btn-sm btn-primary">
                                 View File
                             </a>
                         </td>

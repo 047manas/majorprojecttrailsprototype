@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}NAAC Analytics | Accreditation Intelligence{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.4.1/css/responsive.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 mb-0 text-dark fw-bold" style="letter-spacing: -0.5px;">Institutional Overview</h1>
+            <p class="text-sm text-muted mb-0">Criterion 3 & 5 Real-time Intelligence</p>
+        </div>
+        <div class="btn-group shadow-sm">
+            <button type="button" class="btn btn-success fw-bold px-4 dropdown-toggle" data-bs-toggle="dropdown"
+                aria-expanded="false">
+                <i class="fas fa-file-excel me-2"></i> Export Report
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#" id="exportFull" target="_blank">Full NAAC Report</a></li>
+                <li>
+                    <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item" href="#" id="exportStudents" target="_blank">Student List Only</a></li>
+                <li><a class="dropdown-item" href="#" id="exportEvents" target="_blank">Event Summary Only</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 1. FILTER BAR REDESIGN -->
+    <div class="card filter-card p-3 mb-3 section-spacing border-0 shadow-sm"
+        style="background: #fff; border-radius: 12px;">
+        <form id="filterForm" class="row g-3 align-items-end">
+            <!-- Search -->
+            <div class="col-lg-3 col-md-6">
+                <label class="filter-label fw-bold text-xs text-uppercase text-gray-500">Search</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i
+                            class="fas fa-search text-secondary"></i></span>
+                    <input type="text" class="form-control border-start-0 bg-light" id="tableSearch"
+                        placeholder="Student Name / ID...">
+                </div>
+            </div>
+
+            <!-- Department -->
+            <div class="col-lg-2 col-md-4">
+                <label class="filter-label fw-bold text-xs text-uppercase text-gray-500">Department</label>
+                <select class="form-select bg-light border-0" id="deptSelect" name="department">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept }}">{{ dept }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Batch -->
+            <div class="col-lg-2 col-md-4">
+                <label class="filter-label fw-bold text-xs text-uppercase text-gray-500">Batch</label>
+                <input type="number" class="form-control bg-light border-0" id="batchInput" placeholder="e.g. 2025">
+            </div>
+
+            <!-- Status -->
+            <div class="col-lg-2 col-md-4">
+                <label class="filter-label fw-bold text-xs text-uppercase text-gray-500">Verification</label>
+                <select class="form-select bg-light border-0" id="statusSelect" name="status">
+                    <option value="">All Status</option>
+                    <option value="faculty_verified">Verified Only</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+            </div>
+
+            <!-- Date Range -->
+            <div class="col-lg-3 col-md-6">
+                <label class="filter-label fw-bold text-xs text-uppercase text-gray-500">Date Range</label>
+                <div class="input-group">
+                    <input type="date" class="form-control bg-light border-0" id="dateFrom">
+                    <span class="input-group-text bg-light border-0 text-xs">to</span>
+                    <input type="date" class="form-control bg-light border-0" id="dateTo">
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="col-12 d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="btn btn-light btn-sm px-3 text-secondary" onclick="resetFilters()">
+                    <i class="fas fa-undo me-1"></i> Reset
+                </button>
+                <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="reloadDashboard()">
+                    <i class="fas fa-filter me-1"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ACTIVE FILTERS BANNER -->
+    <div id="activeFiltersBanner"
+        class="alert alert-info d-flex align-items-center py-2 px-3 mb-4 rounded-3 text-sm shadow-sm border-0"
+        style="background: rgba(54, 185, 204, 0.1); color: #2c9faf; display: none !important;">
+        <i class="fas fa-info-circle me-2"></i>
+        <span>Showing results for: <strong id="filterText">All Data</strong></span>
+    </div>
+
+    <!-- 2. KPI CARDS REDESIGN -->
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-4 mb-4">
+        <!-- Events -->
+        <div class="col">
+            <div class="kpi-card purple h-100">
+                <div class="kpi-title">Total Events</div>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="kpi-value" id="kpiEvents">0</div>
+                    <i class="fas fa-calendar-check fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Participations -->
+        <div class="col">
+            <div class="kpi-card info h-100">
+                <div class="kpi-title">Total Participations</div>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="kpi-value" id="kpiParticipations">0</div>
+                    <i class="fas fa-users fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Students -->
+        <div class="col">
+            <div class="kpi-card warning h-100">
+                <div class="kpi-title">Active Students</div>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="kpi-value" id="kpiStudents">0</div>
+                    <i class="fas fa-user-graduate fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Verification -->
+        <div class="col">
+            <div class="kpi-card success h-100">
+                <div class="kpi-title">Verified Rate</div>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="kpi-value" id="kpiVerified">0%</div>
+                    <i class="fas fa-check-circle fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROW 2: MAIN CHARTS -->
+    <div class="row g-4 section-spacing mb-4">
+        <!-- Row 1 Left: Events vs Participations -->
+        <div class="col-lg-6">
+            <div class="chart-panel h-100 shadow-sm border-0">
+                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
+                    Activity Breakdown
+                </div>
+                <div class="chart-container-fixed position-relative">
+                    <canvas id="eventChart"></canvas>
+                    <div id="eventChart-empty" class="empty-state-overlay d-none">
+                        <i class="fas fa-chart-pie mb-2 text-gray-300 fa-2x"></i>
+                        <p class="text-muted text-xs">No Data Available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 1 Right: Yearly Trend -->
+        <div class="col-lg-6">
+            <div class="chart-panel h-100 shadow-sm border-0">
+                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
+                    Yearly Participation Trend
+                </div>
+                <div class="chart-container-fixed position-relative">
+                    <canvas id="trendChart"></canvas>
+                    <div id="trendChart-empty" class="empty-state-overlay d-none">
+                        <i class="fas fa-chart-line mb-2 text-gray-300 fa-2x"></i>
+                        <p class="text-muted text-xs">No Data Available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2 Left: Department Engagement -->
+        <div class="col-lg-6">
+            <div class="chart-panel h-100 shadow-sm border-0">
+                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
+                    Departmental Engagement
+                </div>
+                <div class="chart-container-fixed position-relative">
+                    <canvas id="deptChart"></canvas>
+                    <div id="deptChart-empty" class="empty-state-overlay d-none">
+                        <i class="fas fa-chart-bar mb-2 text-gray-300 fa-2x"></i>
+                        <p class="text-muted text-xs">No Data Available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2 Right: Verification Status -->
+        <div class="col-lg-6">
+            <div class="chart-panel h-100 shadow-sm border-0">
+                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
+                    Verification Status
+                </div>
+                <div class="chart-container-fixed position-relative">
+                    <canvas id="verifyChart"></canvas>
+                    <div id="verifyChart-empty" class="empty-state-overlay d-none">
+                        <i class="fas fa-clipboard-check mb-2 text-gray-300 fa-2x"></i>
+                        <p class="text-muted text-xs">No Data Available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DRILLDOWN / RECORD LIST -->
+    <div class="card table-card mb-5 border-0 shadow-sm">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 fw-bold text-primary">Student Participation Details</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="studentTable" class="table table-hover w-100 align-middle">
+                    <thead class="bg-light text-uppercase text-xs fw-bold text-secondary">
+                        <tr>
+                            <th class="border-0">Student Name</th>
+                            <th class="border-0">Department</th>
+                            <th class="border-0">Activity Title</th>
+                            <th class="border-0">Date</th>
+                            <th class="border-0">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Populated by DataTables via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block scripts %}
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    {% endblock %}

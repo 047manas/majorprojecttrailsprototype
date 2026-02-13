@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Certificate Verification{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body class="{% block body_class %}{% endblock %}">
+    {% block navbar %}
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="#">
+                {% block brand_icon %}📜{% endblock %}
+                {% block brand_text %}Certificate Verification{% endblock %}
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto gap-2">
+                    {% if current_user.is_authenticated %}
+                    {% block nav_items_auth %}
+                    <!-- Default Auth Items -->
+                    {% endblock %}
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-outline-danger">Logout</a>
+                    {% else %}
+                    {% block nav_items_anon %}
+                    <a href="{{ url_for('student.dashboardlogin') }}" class="btn btn-sm btn-primary">Login</a>
+                    {% endblock %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+    {% endblock navbar %}
+
+    <div class="container-fluid px-4">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="mb-4">
+            {% for category, message in messages %}
+            <!-- Map Flask categories to Bootstrap/CSS classes -->
+            {% set alert_class = 'info' %}
+            {% if category == 'error' %}{% set alert_class = 'danger' %}
+            {% elif category == 'success' %}{% set alert_class = 'success' %}
+            {% elif category == 'warning' %}{% set alert_class = 'warning' %}
+            {% endif %}
+
+            <div class="alert alert-{{ alert_class }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

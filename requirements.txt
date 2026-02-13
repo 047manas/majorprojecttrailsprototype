@@ -8,3 +8,5 @@ werkzeug
 xhtml2pdf
 opencv-python
 Pillow
+pandas
+openpyxl

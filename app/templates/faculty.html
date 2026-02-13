@@ -1,155 +1,127 @@
-<!doctype html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faculty Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
+{% block title %}Faculty Dashboard{% endblock %}
 
-<body>
-    <!-- Navigation Bar -->
-    <nav class="navbar navbar-light">
-        <div class="container-fluid d-flex justify-content-between align-items-center">
-            <div class="navbar-brand">📋 Faculty Dashboard</div>
-            <div class="d-flex gap-2">
-                <a href="{{ url_for('main.logout') }}" class="btn btn-sm btn-danger">Logout</a>
-            </div>
+{% block brand_icon %}📋{% endblock %}
+{% block brand_text %}Faculty Dashboard{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<header>
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Faculty Dashboard</h1>
+            <p class="text-muted">Review pending verification requests assigned to you.</p>
         </div>
-    </nav>
-
-    <div class="container">
-        <!-- Header -->
-        <header>
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1>Faculty Dashboard</h1>
-                    <p class="text-muted">Review pending verification requests assigned to you.</p>
-                </div>
-                <div class="header-user-section">
-                    <div class="user-info">
-                        <strong>{{ current_user.full_name }}</strong> <br>
-                        <small>{{ current_user.department or 'N/A' }} | ID: {{ current_user.institution_id or 'N/A'
-                            }}</small>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages() %}
-        {% if messages %}
-        <div class="alert alert-success">
-            {% for message in messages %}
-            <div>{{ message }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-
-        <!-- Filters + KPIs -->
-        <div class="card mb-3 filters-card">
-            <div class="card-body">
-                <form method="get" class="filters-form">
-                    <div class="filter-item">
-                        <label for="department">Department</label>
-                        <input id="department" type="text" name="department" class="form-control" placeholder="e.g. CSE"
-                            value="{{ request.args.get('department', '') }}">
-                    </div>
-                    <div class="filter-item">
-                        <label for="start_date">Start Date</label>
-                        <input id="start_date" type="date" name="start_date" class="form-control"
-                            value="{{ request.args.get('start_date', '') }}">
-                    </div>
-                    <div class="filter-item">
-                        <label for="end_date">End Date</label>
-                        <input id="end_date" type="date" name="end_date" class="form-control"
-                            value="{{ request.args.get('end_date', '') }}">
-                    </div>
-                    <div class="filter-item filter-action">
-                        <button type="submit" class="btn btn-primary filters-apply">Apply Filters</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Compact KPI Grid -->
-        <div class="kpi-grid mb-3">
-            <div class="card kpi-card kpi-primary">
-                <div class="card-body">
-                    <h6 class="card-title">Total Activities</h6>
-                    <h3 class="kpi-value">{% if total_activities is defined %}{{ total_activities }}{% else %}{{
-                        pending_requests|length }}{% endif %}</h3>
-                    <p class="kpi-caption">&nbsp;</p>
-                </div>
-            </div>
-
-            <div class="card kpi-card kpi-success">
-                <div class="card-body">
-                    <h6 class="card-title">Verified Portfolio</h6>
-                    <h3 class="kpi-value">{% if verified_percentage is defined %}{{ verified_percentage }}%{% else %}-{%
-                        endif %}</h3>
-                    <p class="kpi-caption">{% if verified_count is defined %}{{ verified_count }} / {{ total_activities
-                        }}{% else %}&nbsp;{% endif %}</p>
-                </div>
-            </div>
-
-            <div class="card kpi-card kpi-info">
-                <div class="card-body">
-                    <h6 class="card-title">Student Participation</h6>
-                    <h3 class="kpi-value">{% if participation_percentage is defined %}{{ participation_percentage }}%{%
-                        else %}-{% endif %}</h3>
-                    <p class="kpi-caption">{% if participating_students is defined %}{{ participating_students }} / {{
-                        total_students }}{% else %}&nbsp;{% endif %}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Verification Queue Table -->
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h3 class="mb-0">Verification Queue</h3>
-                <small class="text-muted">{{ pending_requests|length }} pending</small>
-            </div>
-            <div class="card-body">
-                {% if pending_requests %}
-                <div class="table-responsive">
-                    <table class="queue-table table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Student Name</th>
-                                <th>Roll / ID</th>
-                                <th>Activity / Title</th>
-                                <th>Uploaded</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for req in pending_requests %}
-                            <tr>
-                                <td>{{ req.student.full_name }}</td>
-                                <td>{{ req.student.institution_id }}</td>
-                                <td>{{ req.title }}</td>
-                                <td>{% if req.created_at %}{{ req.created_at.strftime('%Y-%m-%d') }}{% else %}{{
-                                    req.start_date or '-' }}{% endif %}</td>
-                                <td><span class="status-badge status-pending">Pending Review</span></td>
-                                <td>
-                                    <a href="{{ url_for('main.review_request', act_id=req.id) }}"
-                                        class="btn btn-sm btn-primary">Review</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center text-muted">No pending requests at this time.</div>
-                {% endif %}
+        <div class="header-user-section">
+            <div class="user-info">
+                <strong>{{ current_user.full_name }}</strong> <br>
+                <small>{{ current_user.department or 'N/A' }} | ID: {{ current_user.institution_id or 'N/A'
+                    }}</small>
             </div>
         </div>
     </div>
-</body>
+</header>
 
-</html>
+<!-- Filters + KPIs -->
+<div class="card mb-3 filters-card">
+    <div class="card-body">
+        <form method="get" class="filters-form">
+            <div class="filter-item">
+                <label for="department">Department</label>
+                <input id="department" type="text" name="department" class="form-control" placeholder="e.g. CSE"
+                    value="{{ request.args.get('department', '') }}">
+            </div>
+            <div class="filter-item">
+                <label for="start_date">Start Date</label>
+                <input id="start_date" type="date" name="start_date" class="form-control"
+                    value="{{ request.args.get('start_date', '') }}">
+            </div>
+            <div class="filter-item">
+                <label for="end_date">End Date</label>
+                <input id="end_date" type="date" name="end_date" class="form-control"
+                    value="{{ request.args.get('end_date', '') }}">
+            </div>
+            <div class="filter-item filter-action">
+                <button type="submit" class="btn btn-primary filters-apply">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Compact KPI Grid -->
+<div class="kpi-grid mb-3">
+    <div class="card kpi-card kpi-primary">
+        <div class="card-body">
+            <h6 class="card-title">Total Activities</h6>
+            <h3 class="kpi-value">{% if total_activities is defined %}{{ total_activities }}{% else %}{{
+                pending_requests|length }}{% endif %}</h3>
+            <p class="kpi-caption">&nbsp;</p>
+        </div>
+    </div>
+
+    <div class="card kpi-card kpi-success">
+        <div class="card-body">
+            <h6 class="card-title">Verified Portfolio</h6>
+            <h3 class="kpi-value">{% if verified_percentage is defined %}{{ verified_percentage }}%{% else %}-{%
+                endif %}</h3>
+            <p class="kpi-caption">{% if verified_count is defined %}{{ verified_count }} / {{ total_activities
+                }}{% else %}&nbsp;{% endif %}</p>
+        </div>
+    </div>
+
+    <div class="card kpi-card kpi-info">
+        <div class="card-body">
+            <h6 class="card-title">Student Participation</h6>
+            <h3 class="kpi-value">{% if participation_percentage is defined %}{{ participation_percentage }}%{%
+                else %}-{% endif %}</h3>
+            <p class="kpi-caption">{% if participating_students is defined %}{{ participating_students }} / {{
+                total_students }}{% else %}&nbsp;{% endif %}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Queue Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h3 class="mb-0">Verification Queue</h3>
+        <small class="text-muted">{{ pending_requests|length }} pending</small>
+    </div>
+    <div class="card-body">
+        {% if pending_requests %}
+        <div class="table-responsive">
+            <table class="queue-table table table-sm">
+                <thead>
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Roll / ID</th>
+                        <th>Activity / Title</th>
+                        <th>Uploaded</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in pending_requests %}
+                    <tr>
+                        <td>{{ req.student.full_name }}</td>
+                        <td>{{ req.student.institution_id }}</td>
+                        <td>{{ req.title }}</td>
+                        <td>{% if req.created_at %}{{ req.created_at.strftime('%Y-%m-%d') }}{% else %}{{
+                            req.start_date or '-' }}{% endif %}</td>
+                        <td><span class="status-badge status-pending">Pending Review</span></td>
+                        <td>
+                            <a href="{{ url_for('faculty.review_request', act_id=req.id) }}"
+                                class="btn btn-sm btn-primary">Review</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted">No pending requests at this time.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

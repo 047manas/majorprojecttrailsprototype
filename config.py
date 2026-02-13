@@ -1,9 +1,17 @@
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
-    SQLALCHEMY_DATABASE_URI = "postgresql://postgres:root%40123@localhost:5432/smarthub"
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'postgresql://postgres:root%40123@localhost:5432/smarthub')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB limit
+    
+    # Security: Max Upload Size 16MB
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024
     
     # Upload Folder
     # Assuming 'app' folder is one level down from root where config.py resides

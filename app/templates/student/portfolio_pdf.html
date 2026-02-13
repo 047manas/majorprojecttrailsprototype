@@ -126,13 +126,13 @@
 
                     <br>
                     <a class="verification-link" style="color: #007bff;"
-                        href="{{ url_for('main.serve_upload', filename=act.certificate_file, _external=True) }}">
+                        href="{{ url_for('student.serve_upload', filename=act.certificate_file, _external=True) }}">
                         View File
                     </a>
 
                     {% if act.verification_token %}
                     <a class="verification-link"
-                        href="{{ url_for('main.verify_public', token=act.verification_token, _external=True) }}">
+                        href="{{ url_for('public.verify_public', token=act.verification_token, _external=True) }}">
                         Verify Link
                     </a>
                     {% endif %}

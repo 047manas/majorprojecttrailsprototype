@@ -27,17 +27,21 @@
             <p class="text-center text-muted" style="margin-bottom: var(--spacing-lg);">Sign in to your account</p>
 
             <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                 <div class="form-group">
                     <label for="email">Email Address</label>
-                    <input type="email" name="email" id="email" class="form-control" placeholder="your@institution.edu" required autofocus>
+                    <input type="email" name="email" id="email" class="form-control" placeholder="your@institution.edu"
+                        required autofocus>
                 </div>
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" name="password" id="password" class="form-control" placeholder="Enter your password" required>
+                    <input type="password" name="password" id="password" class="form-control"
+                        placeholder="Enter your password" required>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100" style="padding: var(--spacing-md) var(--spacing-lg); font-size: 1.05rem;">
+                <button type="submit" class="btn btn-primary w-100"
+                    style="padding: var(--spacing-md) var(--spacing-lg); font-size: 1.05rem;">
                     Sign In
                 </button>
             </form>
