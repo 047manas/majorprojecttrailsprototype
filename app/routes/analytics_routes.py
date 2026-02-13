@@ -85,7 +85,6 @@ def get_verification_summary():
 @login_required
 def get_student_list():
     filters = get_filters()
-    # Args
     category = request.args.get('category_name') 
     department = request.args.get('department')
     search = request.args.get('search')
@@ -93,11 +92,6 @@ def get_student_list():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     
-    print("\n--- DEBUG: STUDENT LIST REQUEST ---")
-    print(f"Filters: {filters}")
-    print(f"Args: Cat='{category}', Dept='{department}', Search='{search}', Status='{status}'")
-
-    print(f"DEBUG RT: Student List Req: filters={filters}, args={request.args}")
     data = AnalyticsService.get_student_list(
         category_name=category, 
         department=department, 
@@ -107,12 +101,35 @@ def get_student_list():
         search=search,
         status=status
     )
-    print(f"DEBUG RT: Result Count: {data.get('total_records')}")
+    return jsonify(data)
+
+@analytics_bp.route('/analytics/api/insights')
+@login_required
+def get_admin_insights():
+    filters = get_filters()
+    data = AnalyticsService.get_admin_insights(filters)
+    return jsonify(data)
+
+@analytics_bp.route('/analytics/api/health')
+@login_required
+def get_data_health():
+    data = AnalyticsService.get_data_health_summary()
+    return jsonify(data)
+
+@analytics_bp.route('/analytics/api/comparison')
+@login_required
+def get_comparison():
+    filters = get_filters()
+    data = AnalyticsService.get_comparative_stats(filters)
+    if data is None:
+        return jsonify({"status": "disabled", "reason": "Select Academic Year"})
     return jsonify(data)
 
 @analytics_bp.route('/analytics/test-students/<int:id>')
 def test_students(id):
     return jsonify(AnalyticsService.get_test_student_list(id))
+
+# --- Export Endpoints ---
 
 @analytics_bp.route('/analytics/export-naac')
 @login_required
@@ -121,7 +138,7 @@ def export_naac():
         return abort(403)
         
     filters = get_filters()
-    export_type = request.args.get('type', 'full') # Default to full
+    export_type = request.args.get('type', 'full')
     
     excel_file = AnalyticsService.generate_naac_excel(filters, export_type=export_type)
     
@@ -133,3 +150,55 @@ def export_naac():
         as_attachment=True,
         download_name=filename
     )
+
+@analytics_bp.route('/analytics/export-students-table')
+@login_required
+def export_students_table():
+    """Export the currently filtered student table view."""
+    if current_user.role not in ['admin', 'faculty']:
+        return abort(403)
+    
+    filters = get_filters()
+    excel_file = AnalyticsService.generate_filtered_student_export(
+        category_name=request.args.get('category_name'),
+        department=request.args.get('department'),
+        search=request.args.get('search'),
+        status=request.args.get('status'),
+        filters=filters
+    )
+    
+    filename = f'Filtered_Students_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    return send_file(excel_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=filename)
+
+@analytics_bp.route('/analytics/export-snapshot')
+@login_required
+def export_snapshot():
+    """Lightweight KPI + Insights + Comparison export for meetings."""
+    if current_user.role not in ['admin', 'faculty']:
+        return abort(403)
+    
+    filters = get_filters()
+    excel_file = AnalyticsService.generate_snapshot_export(filters=filters)
+    
+    filename = f'NAAC_Snapshot_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    return send_file(excel_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=filename)
+
+@analytics_bp.route('/analytics/export-event-instance')
+@login_required
+def export_event_instance():
+    """Export students for a specific event identity (drilldown)."""
+    if current_user.role not in ['admin', 'faculty']:
+        return abort(403)
+    
+    event_identity = request.args.get('identity')
+    if not event_identity:
+        return jsonify({"error": "Missing 'identity' parameter"}), 400
+    
+    filters = get_filters()
+    excel_file = AnalyticsService.generate_event_instance_export(event_identity, filters=filters)
+    
+    filename = f'Event_Report_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    return send_file(excel_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=filename)

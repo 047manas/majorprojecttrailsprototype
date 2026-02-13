@@ -2,6 +2,14 @@
 
 {% block title %}NAAC Analytics | Accreditation Intelligence{% endblock %}
 
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active" aria-current="page">Institutional Dashboard</li>
+    </ol>
+</nav>
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <!-- DataTables CSS -->
@@ -88,16 +96,145 @@
                 </div>
             </div>
 
-            <!-- Actions -->
-            <div class="col-12 d-flex justify-content-end gap-2 mt-3">
-                <button type="button" class="btn btn-light btn-sm px-3 text-secondary" onclick="resetFilters()">
-                    <i class="fas fa-undo me-1"></i> Reset
-                </button>
-                <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="reloadDashboard()">
-                    <i class="fas fa-filter me-1"></i> Apply Filters
-                </button>
+            <!-- Actions & Advanced Toggles -->
+            <div class="col-12 d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                <div class="d-flex gap-3 align-items-center">
+                    <div class="form-check form-switch io-switch">
+                        <input class="form-check-input" type="checkbox" id="compareToggle">
+                        <label class="form-check-label fw-bold text-xs text-uppercase text-gray-500"
+                            for="compareToggle">Year-over-Year Performance Analysis</label>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-light btn-sm px-3 text-secondary" onclick="resetFilters()">
+                        <i class="fas fa-undo me-1"></i> Reset
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm"
+                        onclick="reloadDashboard()">
+                        <i class="fas fa-filter me-1"></i> Apply Filters
+                    </button>
+                </div>
             </div>
         </form>
+    </div>
+
+    <!-- DATA HEALTH PANEL (Collapsible) -->
+    <div class="accordion mb-4 shadow-sm" id="healthAccordion">
+        <div class="accordion-item border-0 overflow-hidden" style="border-radius: 12px;">
+            <h2 class="accordion-header" id="headingHealth">
+                <button class="accordion-button collapsed bg-white fw-bold text-secondary text-xs text-uppercase"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#collapseHealth" aria-expanded="false"
+                    aria-controls="collapseHealth">
+                    <i class="fas fa-heartbeat me-2 text-danger"></i> Audit & Data Quality Status
+                </button>
+            </h2>
+            <div id="collapseHealth" class="accordion-collapse collapse" aria-labelledby="headingHealth"
+                data-bs-parent="#healthAccordion">
+                <div class="accordion-body bg-light">
+                    <div class="row g-3" id="healthMetrics">
+                        <div class="col-md-3">
+                            <div class="p-3 bg-white rounded shadow-sm border-start border-4 border-warning">
+                                <span class="d-block text-xs text-muted text-uppercase mb-1">Null Dates</span>
+                                <h5 class="mb-0 fw-bold text-dark" id="healthNullDates">0%</h5>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 bg-white rounded shadow-sm border-start border-4 border-danger">
+                                <span class="d-block text-xs text-muted text-uppercase mb-1">Missing Dept</span>
+                                <h5 class="mb-0 fw-bold text-dark" id="healthMissingDept">0%</h5>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 bg-white rounded shadow-sm border-start border-4 border-info">
+                                <span class="d-block text-xs text-muted text-uppercase mb-1">Missing Category</span>
+                                <h5 class="mb-0 fw-bold text-dark" id="healthMissingCat">0</h5>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 bg-white rounded shadow-sm border-start border-4 border-secondary">
+                                <span class="d-block text-xs text-muted text-uppercase mb-1">Duplicate Entries</span>
+                                <h5 class="mb-0 fw-bold text-dark" id="healthDuplicates">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMINISTRATIVE INSIGHTS -->
+    <div class="row g-4 mb-4" id="adminInsights">
+        <!-- Top Department -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm illustration-card overflow-hidden">
+                <div class="card-body position-relative">
+                    <h6 class="text-xs text-uppercase text-muted fw-bold mb-2">Top Performing Dept</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="icon-circle bg-success-light text-success me-3">
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold text-dark" id="insightTopDept">LOADING...</h5>
+                            <span class="text-xs text-success fw-bold" id="insightTopDeptVal">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Impactful Event -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm illustration-card overflow-hidden">
+                <div class="card-body position-relative">
+                    <h6 class="text-xs text-uppercase text-muted fw-bold mb-2">Most Impactful Event</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="icon-circle bg-primary-light text-primary me-3">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div style="min-width: 0;"> <!-- Flex min-width fix for text-truncate -->
+                            <h5 class="mb-0 fw-bold text-dark text-truncate" id="insightTopEvent">LOADING...</h5>
+                            <span class="text-xs text-primary fw-bold" id="insightTopEventVal">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Verification Efficiency -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm illustration-card overflow-hidden">
+                <div class="card-body position-relative">
+                    <h6 class="text-xs text-uppercase text-muted fw-bold mb-2">Verification Efficiency</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="icon-circle bg-info-light text-info me-3">
+                            <i class="fas fa-check-double"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold text-dark" id="insightVerify">0%</h5>
+                            <span class="text-xs text-muted">Verified / Total</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Alert -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm illustration-card overflow-hidden" id="cardRisk">
+                <div class="card-body position-relative">
+                    <h6 class="text-xs text-uppercase text-muted fw-bold mb-2">Risk Alerts</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="icon-circle bg-danger-light text-danger me-3">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold text-dark" id="insightRiskCount">0</h5>
+                            <span class="text-xs text-danger fw-bold">High Pending Events</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ACTIVE FILTERS BANNER -->
@@ -108,14 +245,17 @@
         <span>Showing results for: <strong id="filterText">All Data</strong></span>
     </div>
 
-    <!-- 2. KPI CARDS REDESIGN -->
+    <!-- 2. KPI CARDS (Legacy Context but Cleaned) -->
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-4 mb-4">
         <!-- Events -->
         <div class="col">
-            <div class="kpi-card purple h-100">
+            <div class="kpi-card purple h-100 shadow-sm border-0">
                 <div class="kpi-title">Total Events</div>
                 <div class="d-flex align-items-center justify-content-between">
-                    <div class="kpi-value" id="kpiEvents">0</div>
+                    <div>
+                        <div class="kpi-value" id="kpiEvents">0</div>
+                        <span class="text-xs fw-bold text-success d-none" id="kpiEventsGrowth"></span>
+                    </div>
                     <i class="fas fa-calendar-check fa-2x text-gray-300 opacity-25"></i>
                 </div>
             </div>
@@ -123,10 +263,13 @@
 
         <!-- Participations -->
         <div class="col">
-            <div class="kpi-card info h-100">
+            <div class="kpi-card info h-100 shadow-sm border-0">
                 <div class="kpi-title">Total Participations</div>
                 <div class="d-flex align-items-center justify-content-between">
-                    <div class="kpi-value" id="kpiParticipations">0</div>
+                    <div>
+                        <div class="kpi-value" id="kpiParticipations">0</div>
+                        <span class="text-xs fw-bold text-success d-none" id="kpiParticipationsGrowth"></span>
+                    </div>
                     <i class="fas fa-users fa-2x text-gray-300 opacity-25"></i>
                 </div>
             </div>
@@ -134,10 +277,13 @@
 
         <!-- Students -->
         <div class="col">
-            <div class="kpi-card warning h-100">
+            <div class="kpi-card warning h-100 shadow-sm border-0">
                 <div class="kpi-title">Active Students</div>
                 <div class="d-flex align-items-center justify-content-between">
-                    <div class="kpi-value" id="kpiStudents">0</div>
+                    <div>
+                        <div class="kpi-value" id="kpiStudents">0</div>
+                        <span class="text-xs fw-bold text-success d-none" id="kpiStudentsGrowth"></span>
+                    </div>
                     <i class="fas fa-user-graduate fa-2x text-gray-300 opacity-25"></i>
                 </div>
             </div>
@@ -145,10 +291,13 @@
 
         <!-- Verification -->
         <div class="col">
-            <div class="kpi-card success h-100">
+            <div class="kpi-card success h-100 shadow-sm border-0">
                 <div class="kpi-title">Verified Rate</div>
                 <div class="d-flex align-items-center justify-content-between">
-                    <div class="kpi-value" id="kpiVerified">0%</div>
+                    <div>
+                        <div class="kpi-value" id="kpiVerified">0%</div>
+                        <span class="text-xs fw-bold text-success d-none" id="kpiVerifiedGrowth"></span>
+                    </div>
                     <i class="fas fa-check-circle fa-2x text-gray-300 opacity-25"></i>
                 </div>
             </div>
@@ -160,8 +309,12 @@
         <!-- Row 1 Left: Events vs Participations -->
         <div class="col-lg-6">
             <div class="chart-panel h-100 shadow-sm border-0">
-                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
-                    Activity Breakdown
+                <div
+                    class="chart-header bg-white border-bottom-0 pt-3 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark">Activity Breakdown</span>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        onclick="downloadChart('dist','activity_breakdown')" title="Download PNG"><i
+                            class="fas fa-download"></i></button>
                 </div>
                 <div class="chart-container-fixed position-relative">
                     <canvas id="eventChart"></canvas>
@@ -176,8 +329,12 @@
         <!-- Row 1 Right: Yearly Trend -->
         <div class="col-lg-6">
             <div class="chart-panel h-100 shadow-sm border-0">
-                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
-                    Yearly Participation Trend
+                <div
+                    class="chart-header bg-white border-bottom-0 pt-3 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark">Yearly Participation Trend</span>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        onclick="downloadChart('trend','yearly_trend')" title="Download PNG"><i
+                            class="fas fa-download"></i></button>
                 </div>
                 <div class="chart-container-fixed position-relative">
                     <canvas id="trendChart"></canvas>
@@ -192,8 +349,12 @@
         <!-- Row 2 Left: Department Engagement -->
         <div class="col-lg-6">
             <div class="chart-panel h-100 shadow-sm border-0">
-                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
-                    Departmental Engagement
+                <div
+                    class="chart-header bg-white border-bottom-0 pt-3 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark">Departmental Engagement</span>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        onclick="downloadChart('dept','dept_engagement')" title="Download PNG"><i
+                            class="fas fa-download"></i></button>
                 </div>
                 <div class="chart-container-fixed position-relative">
                     <canvas id="deptChart"></canvas>
@@ -208,8 +369,12 @@
         <!-- Row 2 Right: Verification Status -->
         <div class="col-lg-6">
             <div class="chart-panel h-100 shadow-sm border-0">
-                <div class="chart-header bg-white border-bottom-0 pt-3 px-3 fw-bold text-dark">
-                    Verification Status
+                <div
+                    class="chart-header bg-white border-bottom-0 pt-3 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark">Verification Status</span>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        onclick="downloadChart('verify','verification_status')" title="Download PNG"><i
+                            class="fas fa-download"></i></button>
                 </div>
                 <div class="chart-container-fixed position-relative">
                     <canvas id="verifyChart"></canvas>
@@ -226,6 +391,16 @@
     <div class="card table-card mb-5 border-0 shadow-sm">
         <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
             <h6 class="m-0 fw-bold text-primary">Student Participation Details</h6>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-success" onclick="exportCurrentTable()" id="exportTableBtn"
+                    title="Export filtered table">
+                    <i class="fas fa-file-excel me-1"></i>Export Table
+                </button>
+                <button class="btn btn-outline-primary" onclick="exportSnapshot()" id="exportSnapshot"
+                    title="Export KPI + Insights Snapshot">
+                    <i class="fas fa-camera me-1"></i>Snapshot
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -235,14 +410,49 @@
                             <th class="border-0">Student Name</th>
                             <th class="border-0">Department</th>
                             <th class="border-0">Activity Title</th>
-                            <th class="border-0">Date</th>
                             <th class="border-0">Status</th>
+                            <th class="border-0">Date</th>
+                            <th class="border-0">Certificate</th>
                         </tr>
                     </thead>
                     <tbody>
                         <!-- Populated by DataTables via JS -->
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+    <!-- DRILLDOWN MODAL -->
+    <div class="modal fade" id="drilldownModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="drilldownTitle">Drilldown Analysis</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    <!-- Breadcrumbs -->
+                    <nav aria-label="breadcrumb" class="mb-3">
+                        <ol class="breadcrumb" id="drilldownBreadcrumb">
+                            <li class="breadcrumb-item active">Overview</li>
+                        </ol>
+                    </nav>
+
+                    <!-- Dynamic Content -->
+                    <div id="drilldownContent" class="bg-white p-3 rounded shadow-sm">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted text-xs">Fetching detailed analytics...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                    <!-- Optional: Export Drilldown Button? -->
+                </div>
             </div>
         </div>
     </div>

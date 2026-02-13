@@ -2,8 +2,14 @@
 
 {% block title %}Certificate Verification - Student Dashboard{% endblock %}
 
-{% block nav_items_auth %}
-<a href="{{ url_for('student.portfolio') }}" class="btn btn-sm btn-outline-primary">My Portfolio</a>
+{% block breadcrumb %}
+{% if current_user.is_authenticated and current_user.role == 'student' %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active" aria-current="page">Upload Activity</li>
+    </ol>
+</nav>
+{% endif %}
 {% endblock %}
 
 {% block content %}

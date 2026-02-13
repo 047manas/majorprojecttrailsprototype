@@ -8,13 +8,22 @@ from functools import wraps
 faculty_bp = Blueprint('faculty', __name__)
 
 # --- Auth Helpers ---
+# --- Auth Helpers ---
 def role_required(*roles):
     def decorator(f):
         @wraps(f)
         @login_required
         def wrapped(*args, **kwargs):
             if current_user.role not in roles:
-                return abort(403)
+                flash("You are not authorized to access that page.", "error")
+                # Redirect based on role to prevent loops
+                if current_user.role == 'student':
+                    return redirect(url_for('student.dashboard'))
+                elif current_user.role == 'faculty':
+                    return redirect(url_for('faculty.dashboard'))
+                elif current_user.role == 'admin':
+                    return redirect(url_for('analytics.naac_dashboard'))
+                return redirect(url_for('public.index'))
             return f(*args, **kwargs)
         return wrapped
     return decorator

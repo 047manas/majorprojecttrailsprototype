@@ -63,94 +63,182 @@ class AnalyticsService:
         return data
 
     @staticmethod
+    def get_comparative_stats(filters=None):
+        """
+        [NEW] Comparative Year-on-Year Growth
+        """
+        if not filters or not filters.get('year'):
+            return None 
+            
+        import time
+        start_time = time.time()
+        
+        try:
+            current_year = int(filters['year'])
+        except:
+            return None
+            
+        # 1. Current Year Stats
+        current_stats = AnalyticsService.get_institution_kpis(filters)
+        
+        # 2. Previous Year Stats
+        prev_filters = filters.copy()
+        prev_filters['year'] = current_year - 1
+        prev_stats = AnalyticsService.get_institution_kpis(prev_filters)
+        
+        # 3. Calculate Growth
+        comparison = {}
+        for key, val in current_stats.items():
+            prev_val = prev_stats.get(key, 0)
+            
+            growth_pct = None
+            label = "No Data"
+            
+            if prev_val > 0:
+                diff = val - prev_val
+                growth_pct = round((diff / prev_val) * 100, 1)
+                label = f"{growth_pct}%"
+            elif prev_val == 0 and val > 0:
+                label = "New"
+            elif prev_val == 0 and val == 0:
+                label = "-"
+            
+            comparison[key] = {
+                "current": val,
+                "previous": prev_val,
+                "growth_pct": growth_pct,
+                "label": label
+            }
+            
+        elapsed = (time.time() - start_time) * 1000
+        print(f"COMPARISON EXEC TIME: {elapsed:.2f}ms")
+        
+        return comparison
+
+    @staticmethod
     def generate_naac_excel(filters=None, export_type='full'):
         """
-        [FIXED] 4 Clean Sheets using Pandas & Service Reusability
+        [REFACTORED] 6-Sheet Audit Ready Report
         """
         output = io.BytesIO()
         writer = pd.ExcelWriter(output, engine='openpyxl')
         
-        # --- SHEET 1: Institutional Summary ---
+        # --- SHEET 1: Executive Summary ---
         if export_type in ['full']:
+            # 1. KPIs
             kpis = AnalyticsService.get_institution_kpis(filters)
-            # Flatten dictionary for dataframe
-            s1_data = [{
+            # 2. Insights
+            insights = AnalyticsService.get_admin_insights(filters)
+            # 3. Growth
+            growth = AnalyticsService.get_comparative_stats(filters)
+            
+            summary_data = {
                 "Report Date": datetime.now().strftime("%Y-%m-%d"),
                 "Applied Filters": str(filters),
-                "Total Students (Active)": kpis['total_students'],
-                "Total Events": kpis['total_events'],
-                "Total Participations": kpis['total_participations'],
-                "Unique Students": kpis['unique_students'],
+                "Total Students": kpis['total_students'],
                 "Engagement Rate": f"{kpis['engagement_rate']}%",
-                "Verified Rate": f"{kpis['verified_rate']}%",
-                "Avg Activities/Student": kpis['avg_activities_per_student']
-            }]
-            df1 = pd.DataFrame(s1_data)
-            df1.to_excel(writer, sheet_name='Institutional_Summary', index=False)
-            AnalyticsService._format_excel_sheet(writer, df1, 'Institutional_Summary')
-
-        # --- SHEET 2: Event Summary ---
-        if export_type in ['full', 'events']:
-            s2_data = AnalyticsService._get_event_summary_list(filters)
-            df2 = pd.DataFrame(s2_data)
-            df2.to_excel(writer, sheet_name='Event_Summary', index=False)
-            AnalyticsService._format_excel_sheet(writer, df2, 'Event_Summary')
-
-        # --- SHEET 3: Department Summary ---
-        if export_type in ['full']:
-            # Reuse get_department_participation logic? 
-            # It returns list of dicts.
-            dept_stats = AnalyticsService.get_department_participation(filters)
-            if isinstance(dept_stats, dict) and dept_stats.get('empty'):
-                 dept_stats = []
+                "Verification Rate": f"{kpis['verified_rate']}%",
+                "Top Department": f"{insights['top_dept']} ({insights['top_dept_val']}%)",
+                "Top Event": f"{insights['top_event']} ({insights['top_event_val']})",
+                "Risk Events Count": len(insights['risk_events']),
+                "Verification Efficiency": f"{insights['verification_efficiency']}%"
+            }
             
-            # Remap keys for Excel
+            if growth:
+                summary_data["YoY Growth (Engagement)"] = growth['engagement_rate']['label']
+                summary_data["YoY Growth (Events)"] = growth['total_events']['label']
+
+            df1 = pd.DataFrame([summary_data])
+            df1.to_excel(writer, sheet_name='Executive_Summary', index=False)
+            AnalyticsService._format_excel_sheet(writer, df1, 'Executive_Summary')
+
+        # --- SHEET 2: Event Intelligence ---
+        if export_type in ['full', 'events']:
+            events = AnalyticsService._get_event_summary_list(filters)
+            # Add Risk Flag
+            for e in events:
+                total = e['Total Participants']
+                pending = e.get('Pending Count', 0)
+                e['Risk Flag'] = "HIGH PENDING" if (total > 0 and (pending/total) > 0.4) else ""
+            
+            df2 = pd.DataFrame(events)
+            df2.to_excel(writer, sheet_name='Event_Intelligence', index=False)
+            AnalyticsService._format_excel_sheet(writer, df2, 'Event_Intelligence')
+
+        # --- SHEET 3: Department Performance ---
+        if export_type in ['full']:
+            dept_stats = AnalyticsService.get_department_participation(filters)
+            if isinstance(dept_stats, dict): dept_stats = []
+            
+            # Ranking included implicity by sort order, but let's add explicitly
+            for i, d in enumerate(dept_stats):
+                d['Rank'] = i + 1
+                
             s3_data = [{
+                "Rank": d['Rank'],
                 "Department": d['department'],
                 "Total Students": d['total'],
-                "Participated Students": d.get('unique', 0),
+                "Participated": d.get('unique', 0),
                 "Engagement %": f"{d['engagement_percent']}%",
-                "Total Events": d['events'],
-                "Total Participations": d['participations']
+                "Events": d['events']
             } for d in dept_stats]
             
             df3 = pd.DataFrame(s3_data)
-            df3.to_excel(writer, sheet_name='Department_Summary', index=False)
-            AnalyticsService._format_excel_sheet(writer, df3, 'Department_Summary')
-        
+            df3.to_excel(writer, sheet_name='Dept_Performance', index=False)
+            AnalyticsService._format_excel_sheet(writer, df3, 'Dept_Performance')
+
         # --- SHEET 4: Student Participation ---
         if export_type in ['full', 'students']:
-            # Fetch ALL rows (paginate=False)
+            # Reuse logic - filtered
             raw_rows = AnalyticsService.get_student_list(paginate=False, filters=filters)
-            
             s4_data = []
             for item in raw_rows:
-                # Generate Certificate Link if file exists
+                 # Certificate Link Logic
                 cert_link = "Not Available"
                 if item.certificate_file:
                     try:
-                        # Construct external URL for the certificate
-                        cert_link = url_for('student.serve_upload', filename=item.certificate_file, _external=True)
-                    except Exception:
-                        cert_link = item.certificate_file # Fallback to filename if url_for fails context
+                         cert_link = url_for('student.serve_upload', filename=item.certificate_file, _external=True)
+                    except: cert_link = item.certificate_file
 
                 s4_data.append({
-                    "Student Name": item.student.full_name,
+                    "Student": item.student.full_name,
                     "Roll No": item.student.institution_id,
-                    "Department": item.student.department,
-                    "Batch": item.student.batch_year, 
-                    "Activity Title": item.title,
+                    "Dept": item.student.department,
+                    "Event": item.title,
                     "Category": item.activity_type.name if item.activity_type else (item.custom_category or 'Other'),
                     "Date": str(item.start_date or item.created_at.date()),
                     "Status": item.status,
-                    "Verification Mode": item.verification_mode,
-                    "Certificate Link": cert_link
+                    "Certificate": cert_link
                 })
-            
             df4 = pd.DataFrame(s4_data)
             df4.to_excel(writer, sheet_name='Student_Participation', index=False)
             AnalyticsService._format_excel_sheet(writer, df4, 'Student_Participation')
-        
+
+        # --- SHEET 5: Audit Flags (Full Export Only) ---
+        if export_type == 'full':
+            health = AnalyticsService.get_data_health_summary()
+            s5_data = [{
+                "Metric": k, "Value": v
+            } for k, v in health.items()]
+            df5 = pd.DataFrame(s5_data)
+            df5.to_excel(writer, sheet_name='Audit_Flags', index=False)
+            AnalyticsService._format_excel_sheet(writer, df5, 'Audit_Flags')
+
+        # --- SHEET 6: Yearly Growth (Full Only) ---
+        if export_type == 'full':
+            try:
+                trend_filters = filters.copy() if filters else {}
+                if 'year' in trend_filters: del trend_filters['year']
+                
+                trend_data = AnalyticsService.get_yearly_trend(trend_filters)
+                if isinstance(trend_data, dict): trend_data = []
+                
+                df6 = pd.DataFrame(trend_data)
+                df6.to_excel(writer, sheet_name='Yearly_Growth', index=False)
+                AnalyticsService._format_excel_sheet(writer, df6, 'Yearly_Growth')
+            except Exception as e:
+                print(f"Error generating Yearly Growth sheet: {e}")
+
         writer.close()
         output.seek(0)
         return output
@@ -192,7 +280,10 @@ class AnalyticsService:
         """
         [PART 4] STRICT ROLE-BASED DATA SCOPE
         """
-        if not current_user.is_authenticated:
+        from flask import has_request_context
+        if not has_request_context():
+            return query  # CLI/test context: no scope restriction
+        if not current_user or not current_user.is_authenticated:
             return query.filter(1 == 0) # No access
             
         if current_user.role == 'admin':
@@ -293,6 +384,18 @@ class AnalyticsService:
                 ed = filters['end_date']
                 query = query.filter(event_date <= ed)
             except: pass
+            
+        # 6. Activity Type
+        if filters.get('activity_type_id') or filters.get('event_type_id'):
+            tid = filters.get('activity_type_id') or filters.get('event_type_id')
+            try:
+                query = query.filter(StudentActivity.activity_type_id == int(tid))
+            except: pass
+
+        # 7. Specific Event Identity (For Drilldown)
+        if filters.get('event_identity'):
+            identity_expr = AnalyticsService._get_event_identity_expr()
+            query = query.filter(identity_expr == filters['event_identity'])
             
         return query
 
@@ -493,25 +596,15 @@ class AnalyticsService:
         }
 
     @staticmethod
-    def get_student_list(category_name=None, department=None, page=1, per_page=20, filters=None, search=None, status=None, paginate=True):
+    def _build_student_query(base_q, category_name=None, department=None, search=None, status=None):
         """
-        [FIXED] Drilldown List with DEBUG LOGGING
+        Shared filter builder for student list queries.
+        Reused by get_student_list and export helpers.
         """
-        print(f"DEBUG SVC: get_student_list args: cat={category_name}, dept={department}, search={search}, status={status}")
-        
-        # 1. Base Query with Scope & Filters
-        base_q = AnalyticsService._get_base_query(filters)
-        # Note: _get_base_query ALREADY joins User.
-        
-        print(f"DEBUG SVC: Base Count (Filtered): {base_q.count()}")
-        
-        # 2. Additional Drilldown Filters (If not covered by main filters)
-        # These come from table-specific interactions
         if department and department != 'All':
             base_q = base_q.filter(User.department == department)
         
         if status and status != 'All':
-            # Map status string if needed, currently direct match
             base_q = base_q.filter(StudentActivity.status == status)
 
         if category_name and category_name != 'All':
@@ -529,8 +622,44 @@ class AnalyticsService:
                 User.institution_id.ilike(search_term),
                 StudentActivity.title.ilike(search_term)
             ))
-            
-        print(f"DEBUG SVC: Final Count Before Pagination: {base_q.count()}")
+        
+        return base_q
+
+    @staticmethod
+    def _serialize_student_item(item, include_certificate=False):
+        """Serialize a StudentActivity ORM object to dict."""
+        row = {
+            "student_name": item.student.full_name,
+            "roll_number": item.student.institution_id,
+            "department": item.student.department,
+            "title": item.title,
+            "status": item.status,
+            "category": item.activity_type.name if item.activity_type else (item.custom_category or 'Other'),
+            "date": str(item.start_date or item.created_at.date()),
+            "verification_mode": item.verification_mode or 'N/A'
+        }
+        if include_certificate:
+            cert_url = None
+            if item.certificate_file:
+                try:
+                    cert_url = url_for('student.serve_upload', filename=item.certificate_file, _external=True)
+                except Exception:
+                    cert_url = None
+            row["certificate_url"] = cert_url
+            row["certificate_hash"] = item.certificate_hash
+            row["verification_token"] = item.verification_token
+        return row
+
+    @staticmethod
+    def get_student_list(category_name=None, department=None, page=1, per_page=20, filters=None, search=None, status=None, paginate=True):
+        """
+        Drilldown List — now includes certificate data for admin/faculty.
+        """
+        import time
+        t0 = time.time()
+
+        base_q = AnalyticsService._get_base_query(filters)
+        base_q = AnalyticsService._build_student_query(base_q, category_name, department, search, status)
 
         query = base_q.order_by(AnalyticsService._get_event_date_expr().desc())
         
@@ -539,16 +668,21 @@ class AnalyticsService:
         
         pagination = query.paginate(page=page, per_page=per_page, error_out=False)
         
+        # Determine if caller has certificate access
+        include_cert = False
+        try:
+            from flask import has_request_context
+            if has_request_context() and current_user and current_user.is_authenticated:
+                include_cert = current_user.role in ('admin', 'faculty')
+        except Exception:
+            pass
+
+        elapsed = (time.time() - t0) * 1000
+        if elapsed > 1000:
+            print(f"PERF WARNING: get_student_list took {elapsed:.0f}ms")
+        
         return {
-            "students": [{
-                "student_name": item.student.full_name,
-                "roll_number": item.student.institution_id,
-                "department": item.student.department,
-                "title": item.title,
-                "status": item.status,
-                "category": item.activity_type.name if item.activity_type else (item.custom_category or 'Other'),
-                "date": str(item.start_date or item.created_at.date())
-            } for item in pagination.items],
+            "students": [AnalyticsService._serialize_student_item(item, include_certificate=include_cert) for item in pagination.items],
             "total_pages": pagination.pages,
             "current_page": pagination.page,
             "total_records": pagination.total
@@ -575,7 +709,8 @@ class AnalyticsService:
             
             func.count(StudentActivity.id).label('participations'),
             func.count(distinct(StudentActivity.student_id)).label('unique_students'),
-             func.sum(case((or_(StudentActivity.status == 'faculty_verified', StudentActivity.status == 'auto_verified'), 1), else_=0)).label('verified_count')
+             func.sum(case((or_(StudentActivity.status == 'faculty_verified', StudentActivity.status == 'auto_verified'), 1), else_=0)).label('verified_count'),
+             func.sum(case((StudentActivity.status == 'pending', 1), else_=0)).label('pending_count')
         ).group_by(
             identity_expr
         )
@@ -594,9 +729,108 @@ class AnalyticsService:
                 "Total Participants": r.participations,
                 "Unique Students": r.unique_students,
                 "Verified Count": int(r.verified_count or 0),
+                "Pending Count": int(r.pending_count or 0),
                 "Engagement %": f"{round(r.unique_students/r.participations*100, 1) if r.participations else 0}%"
             })
         return data
+
+    @staticmethod
+    def get_data_health_summary():
+        """
+        [NEW] Data Integrity & Health Check
+        """
+        base_q = AnalyticsService._get_base_query() # No filters for global health
+        
+        # 1. Null Dates
+        null_dates = base_q.filter(StudentActivity.start_date.is_(None)).count()
+        total_records = base_q.count()
+        
+        # 2. Missing Department
+        missing_dept = base_q.filter(User.department.is_(None)).count()
+        
+        # 3. Duplicate Event Entries (Same Student, Same Identity)
+        identity_expr = AnalyticsService._get_event_identity_expr()
+        dupe_entries = base_q.with_entities(StudentActivity.student_id, identity_expr)\
+            .group_by(StudentActivity.student_id, identity_expr)\
+            .having(func.count(StudentActivity.id) > 1).count()
+
+        # 4. Events Missing Category
+        missing_cat = base_q.filter(
+            StudentActivity.activity_type_id.is_(None),
+            or_(StudentActivity.custom_category.is_(None), StudentActivity.custom_category == '')
+        ).count()
+        
+        return {
+            "total_records": total_records,
+            "null_dates": null_dates,
+            "null_dates_percent": round(null_dates/total_records*100, 1) if total_records else 0,
+            "missing_dept": missing_dept,
+            "missing_dept_percent": round(missing_dept/total_records*100, 1) if total_records else 0,
+            "duplicate_entries": dupe_entries,
+            "missing_category": missing_cat
+        }
+
+    @staticmethod
+    def get_admin_insights(filters=None):
+        """
+        [NEW] Administrative Insights 
+        Reuses existing aggregation methods.
+        """
+        import time
+        start_time = time.time()
+        
+        insights = {
+            "top_dept": "N/A", "top_dept_val": 0,
+            "low_dept": "N/A", "low_dept_val": 0,
+            "top_event": "N/A", "top_event_val": 0,
+            "top_category": "N/A",  "top_category_val": 0,
+            "verification_efficiency": 0,
+            "low_engagement_depts": [],
+            "risk_events": []
+        }
+        
+        # 1. Dept Performance
+        dept_stats = AnalyticsService.get_department_participation(filters)
+        if dept_stats and not isinstance(dept_stats, dict):
+            top = dept_stats[0]
+            low = dept_stats[-1]
+            insights['top_dept'] = top['department']
+            insights['top_dept_val'] = top['engagement_percent']
+            insights['low_dept'] = low['department']
+            insights['low_dept_val'] = low['engagement_percent']
+            
+            insights['low_engagement_depts'] = [d['department'] for d in dept_stats if d['engagement_percent'] < 30]
+
+        # 2. Event Performance
+        events = AnalyticsService._get_event_summary_list(filters)
+        if events:
+            top_event = max(events, key=lambda x: x['Unique Students'])
+            insights['top_event'] = top_event['Event Title']
+            insights['top_event_val'] = top_event['Unique Students']
+            
+            risk_list = []
+            for e in events:
+                total = e['Total Participants']
+                pending = e.get('Pending Count', 0)
+                if total > 0 and (pending / total) > 0.4:
+                    risk_list.append(e['Event Title'])
+            insights['risk_events'] = risk_list
+
+        # 3. Category Performance
+        dist = AnalyticsService.get_event_distribution(filters)
+        if dist and not isinstance(dist, dict):
+            top_cat = max(dist, key=lambda x: x['participations'])
+            insights['top_category'] = top_cat['category']
+            insights['top_category_val'] = top_cat['participations']
+            
+        # 4. Verification Efficiency
+        kpis = AnalyticsService.get_institution_kpis(filters)
+        insights['verification_efficiency'] = kpis['verified_rate']
+
+        elapsed = (time.time() - start_time) * 1000
+        print(f"INSIGHTS EXEC TIME: {elapsed:.2f}ms")
+        
+        return insights
 
     @staticmethod
     def generate_naac_excel(filters=None, export_type='full'):
@@ -650,13 +884,12 @@ class AnalyticsService:
             df3.to_excel(writer, sheet_name='Department_Summary', index=False)
             AnalyticsService._format_excel_sheet(writer, df3, 'Department_Summary')
         
-        # --- SHEET 4: Student Participation ---
+        # --- SHEET 4: Student Participation (Audit-Ready) ---
         if export_type in ['full', 'students']:
             raw_rows = AnalyticsService.get_student_list(paginate=False, filters=filters)
             
             s4_data = []
             for item in raw_rows:
-                # Generate Certificate Link
                 cert_link = "Not Available"
                 if item.certificate_file:
                     try:
@@ -673,7 +906,8 @@ class AnalyticsService:
                     "Category": item.activity_type.name if item.activity_type else (item.custom_category or 'Other'),
                     "Date": str(item.start_date or item.created_at.date()),
                     "Status": item.status,
-                    "Verification Mode": item.verification_mode,
+                    "Verification Mode": item.verification_mode or 'N/A',
+                    "Certificate Hash": item.certificate_hash or 'N/A',
                     "Certificate Link": cert_link
                 })
             
@@ -684,7 +918,209 @@ class AnalyticsService:
         writer.close()
         output.seek(0)
         return output
-    
 
+    # ============================================================
+    # PHASE 5: ADVANCED EXPORTS
+    # ============================================================
 
+    @staticmethod
+    def get_comparative_stats(filters=None):
+        """
+        Year-over-Year comparison. Requires 'year' in filters.
+        """
+        if not filters or not filters.get('year'):
+            return None
+        
+        current_year = int(filters['year'])
+        prev_year = current_year - 1
+        
+        current_filters = {**filters, 'year': current_year}
+        prev_filters = {**filters, 'year': prev_year}
+        
+        cur = AnalyticsService.get_institution_kpis(current_filters)
+        prev = AnalyticsService.get_institution_kpis(prev_filters)
+        
+        def growth(cur_val, prev_val):
+            if prev_val == 0:
+                return {"current": cur_val, "previous": prev_val, "growth_pct": None}
+            pct = round((cur_val - prev_val) / prev_val * 100, 1)
+            return {"current": cur_val, "previous": prev_val, "growth_pct": pct}
+        
+        return {
+            "current_year": current_year,
+            "previous_year": prev_year,
+            "total_events": growth(cur['total_events'], prev['total_events']),
+            "total_participations": growth(cur['total_participations'], prev['total_participations']),
+            "total_students": growth(cur['total_students'], prev['total_students']),
+            "verified_rate": growth(cur['verified_rate'], prev['verified_rate'])
+        }
 
+    @staticmethod
+    def generate_filtered_student_export(category_name=None, department=None, search=None, status=None, filters=None):
+        """
+        Export exactly the filtered student list as Excel.
+        """
+        import time
+        t0 = time.time()
+
+        base_q = AnalyticsService._get_base_query(filters)
+        base_q = AnalyticsService._build_student_query(base_q, category_name, department, search, status)
+        rows = base_q.order_by(AnalyticsService._get_event_date_expr().desc()).all()
+
+        s_data = []
+        for item in rows:
+            cert_link = "Not Available"
+            if item.certificate_file:
+                try:
+                    cert_link = url_for('student.serve_upload', filename=item.certificate_file, _external=True)
+                except Exception:
+                    cert_link = item.certificate_file
+            
+            s_data.append({
+                "Student Name": item.student.full_name,
+                "Roll No": item.student.institution_id,
+                "Department": item.student.department,
+                "Batch": item.student.batch_year,
+                "Activity Title": item.title,
+                "Category": item.activity_type.name if item.activity_type else (item.custom_category or 'Other'),
+                "Date": str(item.start_date or item.created_at.date()),
+                "Status": item.status,
+                "Verification Mode": item.verification_mode or 'N/A',
+                "Certificate Hash": item.certificate_hash or 'N/A',
+                "Certificate Link": cert_link
+            })
+
+        output = io.BytesIO()
+        writer = pd.ExcelWriter(output, engine='openpyxl')
+
+        # Summary row
+        filter_desc = f"Dept={department or 'All'}, Cat={category_name or 'All'}, Status={status or 'All'}, Search={search or 'N/A'}"
+        meta = pd.DataFrame([{
+            "Generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "Records": len(s_data),
+            "Filters Applied": filter_desc
+        }])
+        meta.to_excel(writer, sheet_name='Filtered_Student_List', index=False, startrow=0)
+
+        df = pd.DataFrame(s_data)
+        df.to_excel(writer, sheet_name='Filtered_Student_List', index=False, startrow=3)
+        AnalyticsService._format_excel_sheet(writer, df, 'Filtered_Student_List')
+
+        # Freeze top rows
+        try:
+            ws = writer.sheets['Filtered_Student_List']
+            ws.freeze_panes = 'A5'
+        except Exception:
+            pass
+
+        writer.close()
+        output.seek(0)
+
+        elapsed = (time.time() - t0) * 1000
+        if elapsed > 1000:
+            print(f"PERF WARNING: generate_filtered_student_export took {elapsed:.0f}ms")
+
+        return output
+
+    @staticmethod
+    def generate_snapshot_export(filters=None):
+        """
+        Lightweight 3-sheet export: KPIs, Insights, Comparison.
+        """
+        output = io.BytesIO()
+        writer = pd.ExcelWriter(output, engine='openpyxl')
+
+        # Sheet 1: KPI Snapshot
+        kpis = AnalyticsService.get_institution_kpis(filters)
+        df1 = pd.DataFrame([{
+            "Report Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "Filters": str(filters),
+            "Total Students": kpis['total_students'],
+            "Total Events": kpis['total_events'],
+            "Participations": kpis['total_participations'],
+            "Unique Students": kpis['unique_students'],
+            "Engagement Rate": f"{kpis['engagement_rate']}%",
+            "Verified Rate": f"{kpis['verified_rate']}%"
+        }])
+        df1.to_excel(writer, sheet_name='KPI_Snapshot', index=False)
+        AnalyticsService._format_excel_sheet(writer, df1, 'KPI_Snapshot')
+
+        # Sheet 2: Admin Insights
+        insights = AnalyticsService.get_admin_insights(filters)
+        df2 = pd.DataFrame([{
+            "Top Department": insights['top_dept'],
+            "Top Dept Engagement": f"{insights['top_dept_val']}%",
+            "Lowest Department": insights.get('low_dept', 'N/A'),
+            "Lowest Dept Engagement": f"{insights.get('low_dept_val', 0)}%",
+            "Top Event": insights['top_event'],
+            "Top Event Students": insights['top_event_val'],
+            "Verification Efficiency": f"{insights['verification_efficiency']}%",
+            "Risk Events Count": len(insights['risk_events']),
+            "Risk Events": ', '.join(insights['risk_events']) if insights['risk_events'] else 'None'
+        }])
+        df2.to_excel(writer, sheet_name='Admin_Insights', index=False)
+        AnalyticsService._format_excel_sheet(writer, df2, 'Admin_Insights')
+
+        # Sheet 3: Comparison (if year available)
+        comp = AnalyticsService.get_comparative_stats(filters)
+        if comp:
+            rows = []
+            for metric in ['total_events', 'total_participations', 'total_students', 'verified_rate']:
+                obj = comp[metric]
+                rows.append({
+                    "Metric": metric.replace('_', ' ').title(),
+                    f"{comp['current_year']}": obj['current'],
+                    f"{comp['previous_year']}": obj['previous'],
+                    "Growth %": f"{obj['growth_pct']}%" if obj['growth_pct'] is not None else 'N/A'
+                })
+            df3 = pd.DataFrame(rows)
+            df3.to_excel(writer, sheet_name='Year_Comparison', index=False)
+            AnalyticsService._format_excel_sheet(writer, df3, 'Year_Comparison')
+        else:
+            df3 = pd.DataFrame([{"Note": "Select a specific Year filter to enable comparison."}])
+            df3.to_excel(writer, sheet_name='Year_Comparison', index=False)
+
+        writer.close()
+        output.seek(0)
+        return output
+
+    @staticmethod
+    def generate_event_instance_export(event_identity, filters=None):
+        """
+        Export students for a specific event identity (drilldown level).
+        """
+        base_q = AnalyticsService._get_base_query(filters)
+        identity_expr = AnalyticsService._get_event_identity_expr()
+
+        rows = base_q.filter(identity_expr == event_identity)\
+            .order_by(User.department, User.full_name).all()
+
+        s_data = []
+        for item in rows:
+            cert_link = "Not Available"
+            if item.certificate_file:
+                try:
+                    cert_link = url_for('student.serve_upload', filename=item.certificate_file, _external=True)
+                except Exception:
+                    cert_link = item.certificate_file
+            s_data.append({
+                "Student Name": item.student.full_name,
+                "Roll No": item.student.institution_id,
+                "Department": item.student.department,
+                "Batch": item.student.batch_year,
+                "Status": item.status,
+                "Verification Mode": item.verification_mode or 'N/A',
+                "Certificate Hash": item.certificate_hash or 'N/A',
+                "Certificate Link": cert_link
+            })
+
+        output = io.BytesIO()
+        writer = pd.ExcelWriter(output, engine='openpyxl')
+
+        df = pd.DataFrame(s_data)
+        df.to_excel(writer, sheet_name='Event_Instance_Report', index=False)
+        AnalyticsService._format_excel_sheet(writer, df, 'Event_Instance_Report')
+
+        writer.close()
+        output.seek(0)
+        return output

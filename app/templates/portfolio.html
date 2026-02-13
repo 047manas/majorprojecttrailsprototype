@@ -1,151 +1,108 @@
-<!doctype html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Portfolio - Student</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
+{% block title %}My Portfolio - Student{% endblock %}
 
-<body>
-    <!-- Navigation Bar -->
-    <nav class="navbar navbar-light">
-        <div class="container-fluid d-flex justify-content-between align-items-center">
-            <div class="navbar-brand">📜 My Portfolio</div>
-            <div class="d-flex gap-2">
-                <a href="{{ url_for('student.dashboard') }}" class="btn btn-sm btn-outline-secondary">Back to
-                    Dashboard</a>
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger">Logout</a>
-            </div>
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">My Portfolio</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-4">
+    <div class="col-md-8">
+        <h1 class="h3 mb-0 text-gray-800">Activity History</h1>
+        <p class="text-muted mb-0">View all your recorded certificates and their verification status.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <a href="{{ url_for('student.portfolio_pdf', mode='verified') }}" class="btn btn-success">
+            <i class="fas fa-file-pdf me-1"></i> Download Portfolio
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Your Activities</h6>
+    </div>
+    <div class="card-body p-0">
+        {% if activities %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Date</th>
+                        <th>Activity Type</th>
+                        <th>Title</th>
+                        <th>Issuer</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for act in activities %}
+                    <tr>
+                        <td class="ps-4">
+                            <small class="text-muted">{{ act.start_date or act.created_at.strftime('%Y-%m-%d')
+                                }}</small>
+                        </td>
+                        <td>
+                            {% if act.activity_type %}
+                            <span class="badge bg-secondary">{{ act.activity_type.name }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ act.custom_category }} (Other)</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold">{{ act.title }}</td>
+                        <td>{{ act.issuer_name or '-' }}</td>
+                        <td>
+                            {% if act.status == 'auto_verified' %}
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i> Auto Verified</span>
+                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">
+                                {% if act.verification_mode and 'qr' in act.verification_mode %}via QR Code
+                                {% elif act.verification_mode == 'link_only' %}via Certificate Link
+                                {% else %}via Text Analysis{% endif %}
+                            </small>
+                            {% elif act.status == 'faculty_verified' %}
+                            <span class="badge bg-primary"><i class="fas fa-user-check me-1"></i> Verified</span>
+                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">By Faculty</small>
+                            {% elif act.status == 'rejected' %}
+                            <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i> Rejected</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark"><i class="fas fa-hourglass-half me-1"></i>
+                                Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('student.serve_upload', filename=act.certificate_file) }}"
+                                target="_blank" class="btn btn-sm btn-outline-primary">
+                                View File
+                            </a>
+                            {% if act.verification_token %}
+                            <div class="mt-1">
+                                <a href="{{ url_for('public.verify_public', token=act.verification_token) }}"
+                                    target="_blank" class="text-xs text-muted text-decoration-none">
+                                    <i class="fas fa-external-link-alt me-1"></i>Public Link
+                                </a>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-    </nav>
-
-    <div class="container">
-        <!-- Header -->
-        <header>
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1>Activity History</h1>
-                    <p class="text-muted">View all your recorded certificates and their verification status.</p>
-                </div>
-                <div>
-                    <a href="{{ url_for('student.portfolio_pdf', mode='verified') }}" class="btn btn-success">
-                        📥 Download Portfolio (Verified)
-                    </a>
-                </div>
-            </div>
-        </header>
-
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages() %}
-        {% if messages %}
-        <div class="alert alert-info">
-            {% for message in messages %}
-            <div>{{ message }}</div>
-            {% endfor %}
+        {% else %}
+        <div class="text-center py-5">
+            <div class="text-muted mb-3">No activities recorded yet.</div>
+            <a href="{{ url_for('student.dashboard') }}" class="btn btn-primary">
+                <i class="fas fa-upload me-1"></i> Upload Your First Certificate
+            </a>
         </div>
         {% endif %}
-        {% endwith %}
-
-        <!-- Activities Table -->
-        <div class="card">
-            <div class="card-header">
-                <h3 style="margin: 0;">Your Activities</h3>
-            </div>
-            <div class="card-body">
-                {% if activities %}
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Activity Type</th>
-                                <th>Title</th>
-                                <th>Issuer</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for act in activities %}
-                            <tr>
-                                <td>
-                                    <small class="text-muted">{{ act.start_date or act.created_at.strftime('%Y-%m-%d')
-                                        }}</small>
-                                </td>
-                                <td>
-                                    {% if act.activity_type %}
-                                    <span class="badge bg-secondary">{{ act.activity_type.name }}</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">{{ act.custom_category }} (Other)</span>
-                                    {% endif %}
-                                </td>
-                                <td><strong>{{ act.title }}</strong></td>
-                                <td>{{ act.issuer_name or '-' }}</td>
-                                <td>
-                                    {% if act.status == 'auto_verified' %}
-                                    <span class="status-badge status-auto-verified">✓ Auto Verified</span>
-                                    <small class="text-muted d-block mt-1">
-                                        {% if act.verification_mode and 'qr' in act.verification_mode %}
-                                        via QR Code
-                                        {% elif act.verification_mode == 'link_only' %}
-                                        via Certificate Link
-                                        {% else %}
-                                        via Text Analysis
-                                        {% endif %}
-                                    </small>
-                                    {% if act.auto_details %}
-                                    <details style="margin-top: var(--spacing-sm);">
-                                        <summary
-                                            style="cursor: pointer; color: var(--primary-color); font-size: 0.85rem;">
-                                            Details</summary>
-                                        <div
-                                            style="background: var(--border-light); padding: var(--spacing-sm); border: 1px solid var(--border-color); border-radius: 0.375rem; max-width: 250px; overflow-wrap: break-word; margin-top: var(--spacing-sm);">
-                                            <code
-                                                style="font-size: 0.7rem; display: block; white-space: pre-wrap;">{{ act.auto_details }}</code>
-                                        </div>
-                                    </details>
-                                    {% endif %}
-                                    {% elif act.status == 'faculty_verified' %}
-                                    <span class="status-badge status-verified">✓ Verified</span>
-                                    <small class="text-muted d-block mt-1">By Faculty</small>
-                                    {% elif act.status == 'rejected' %}
-                                    <span class="status-badge status-rejected">✗ Rejected</span>
-                                    {% else %}
-                                    <span class="status-badge status-pending">⏳ Pending Review</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <a href="{{ url_for('student.serve_upload', filename=act.certificate_file) }}"
-                                        target="_blank" class="btn btn-sm btn-outline-primary">
-                                        View File
-                                    </a>
-                                    {% if act.verification_token %}
-                                    <br>
-                                    <small>
-                                        <a href="{{ url_for('public.verify_public', token=act.verification_token) }}"
-                                            target="_blank" class="text-muted">
-                                            Public Link
-                                        </a>
-                                    </small>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center text-muted" style="padding: var(--spacing-xl) 0;">
-                    <p>No activities recorded yet.</p>
-                    <a href="{{ url_for('student.dashboard') }}" class="btn btn-primary">Upload Your First
-                        Certificate</a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
     </div>
-</body>
-
-</html>
+</div>
+{% endblock %}

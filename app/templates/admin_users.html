@@ -2,9 +2,13 @@
 
 {% block title %}Admin - User Management{% endblock %}
 
-{% block nav_items_auth %}
-<a href="{{ url_for('admin.activity_types') }}" class="btn btn-outline-primary">Manage Activity Types</a>
-<a href="{{ url_for('analytics.naac_dashboard') }}" class="btn btn-outline-primary">NAAC Dashboard</a>
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('analytics.naac_dashboard') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">User Management</li>
+    </ol>
+</nav>
 {% endblock %}
 
 {% block content %}

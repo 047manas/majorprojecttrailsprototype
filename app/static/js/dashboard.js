@@ -1,4 +1,4 @@
-// Dashboard Logic with DataTables and Chart.js
+// Dashboard Logic with DataTables, Chart.js, and Advanced Exports
 
 // Global Chart Instances
 let charts = {
@@ -11,13 +11,26 @@ let charts = {
 // Global DataTable Instance
 let studentTable = null;
 
+// Current filter state (for export URLs)
+let currentFilters = new URLSearchParams();
+
 const API = {
     DIST: '/analytics/api/distribution',
     TREND: '/analytics/api/yearly-trend',
     KPIS: '/analytics/api/kpis',
     LIST: '/analytics/api/student-list',
     DEPT: '/analytics/api/department-participation',
-    VERIFY: '/analytics/api/verification-summary'
+    VERIFY: '/analytics/api/verification-summary',
+    INSIGHTS: '/analytics/api/insights',
+    HEALTH: '/analytics/api/health',
+    COMPARE: '/analytics/api/comparison'
+};
+
+const EXPORT = {
+    NAAC: '/analytics/export-naac',
+    TABLE: '/analytics/export-students-table',
+    SNAPSHOT: '/analytics/export-snapshot',
+    EVENT: '/analytics/export-event-instance'
 };
 
 // Set Chart Text Color
@@ -31,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initDashboard() {
-    // Initialize DataTable (No Buttons)
     initDataTable();
 
     // Reset Filters Button
@@ -40,27 +52,34 @@ function initDashboard() {
         reloadDashboard();
     };
 
+    // Compare Toggle Listener
+    const toggle = document.getElementById('compareToggle');
+    if (toggle) {
+        toggle.addEventListener('change', reloadDashboard);
+    }
+
     // Initial Load
     reloadDashboard();
+
+    // Load Global Health (Once)
+    loadHealth();
 }
 
 function initDataTable() {
     studentTable = $('#studentTable').DataTable({
         responsive: true,
         pageLength: 20,
-        dom: 'frtip', // No Buttons (B)
-        order: [[3, 'desc']], // Date desc
+        dom: 'frtip',
+        order: [[4, 'desc']], // Date desc (shifted due to new column)
         columns: [
             { data: 'student_name' },
             { data: 'department' },
             {
                 data: 'title',
                 render: function (data, type, row) {
-                    // Show title, maybe add category pill?
                     return `<div><div class="fw-bold text-dark">${data}</div><div class="text-xs text-muted">${row.category || ''}</div></div>`;
                 }
             },
-            { data: 'date' },
             {
                 data: 'status',
                 render: function (data) {
@@ -71,6 +90,18 @@ function initDataTable() {
 
                     const statusText = data ? data.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'N/A';
                     return `<span class="badge ${badgeClass}">${statusText}</span>`;
+                }
+            },
+            { data: 'date' },
+            {
+                // Certificate Column
+                data: 'certificate_url',
+                orderable: false,
+                render: function (data, type, row) {
+                    if (data) {
+                        return `<a href="${data}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2"><i class="fas fa-file-alt me-1"></i>View</a>`;
+                    }
+                    return `<span class="text-muted text-xs">Unavailable</span>`;
                 }
             }
         ],
@@ -126,11 +157,23 @@ function reloadDashboard() {
         activeFilters.push(`To: ${end}`);
     }
 
+    // Compare Toggle
+    const compareMode = document.getElementById('compareToggle').checked;
+    if (compareMode) {
+        if (start) {
+            const year = new Date(start).getFullYear();
+            filters.append('year', year);
+        }
+        activeFilters.push("VS Prev Year");
+    }
+
+    // Save to global state for export functions
+    currentFilters = filters;
+
     // Update Active Filters Banner
     const banner = document.getElementById('activeFiltersBanner');
     const bannerText = document.getElementById('filterText');
 
-    // Check if we have active filters
     if (activeFilters.length > 0) {
         banner.style.display = 'flex';
         banner.classList.remove('d-none');
@@ -141,31 +184,36 @@ function reloadDashboard() {
         bannerText.textContent = 'All Data';
     }
 
-    // Update Export URLs
-    const exportBase = '/analytics/export-naac';
+    // Update Export URLs (NAAC Full Reports)
     const queryString = filters.toString();
 
-    // Use & if queryString exists, else nothing (but base url usually needs ?)
-    // Our route is /analytics/export-naac?type=...&filters...
-
-    const setHref = (id, type) => {
+    const setHref = (id, url, type) => {
         const el = document.getElementById(id);
         if (el) {
-            el.href = `${exportBase}?type=${type}&${queryString}`;
+            el.href = `${url}?type=${type}&${queryString}`;
         }
     };
 
-    setHref('exportFull', 'full');
-    setHref('exportStudents', 'students');
-    setHref('exportEvents', 'events');
+    setHref('exportFull', EXPORT.NAAC, 'full');
+    setHref('exportStudents', EXPORT.NAAC, 'students');
+    setHref('exportEvents', EXPORT.NAAC, 'events');
+
+    // Update Advanced Export URLs
+    const snapshotEl = document.getElementById('exportSnapshot');
+    if (snapshotEl) snapshotEl.href = `${EXPORT.SNAPSHOT}?${queryString}`;
+
+    const tableExportEl = document.getElementById('exportTableBtn');
+    if (tableExportEl) tableExportEl.href = `${EXPORT.TABLE}?${queryString}`;
 
     // Reload Components
-    loadKPIs(filters);
+    if (compareMode) {
+        loadComparison(filters);
+    } else {
+        loadKPIs(filters);
+    }
 
-    // Clear charts before loading to prevent 'ghosting' or race conditions? 
-    // No, renderChart handles destruction.
-    loadCharts(filters);
-
+    loadInsights(filters);
+    loadCharts(filters, compareMode);
     loadTableData(filters);
 }
 
@@ -180,8 +228,48 @@ async function fetchJSON(url, params) {
     }
 }
 
+async function loadHealth() {
+    const data = await fetchJSON(API.HEALTH, new URLSearchParams());
+    if (!data) return;
+
+    updateText('healthNullDates', data.null_dates_percent + '%');
+    updateText('healthMissingDept', data.missing_dept_percent + '%');
+    updateText('healthMissingCat', data.missing_category);
+    updateText('healthDuplicates', data.duplicate_entries);
+}
+
+async function loadInsights(params) {
+    const data = await fetchJSON(API.INSIGHTS, params);
+    if (!data) return;
+
+    updateText('insightTopDept', data.top_dept);
+    updateText('insightTopDeptVal', data.top_dept_val + '% Engagement');
+
+    updateText('insightTopEvent', data.top_event);
+    updateText('insightTopEventVal', data.top_event_val + ' Students');
+
+    updateText('insightVerify', data.verification_efficiency + '%');
+    updateText('insightRiskCount', data.risk_events.length);
+
+    // Highlight Risk Card if count > 0
+    const riskCard = document.getElementById('cardRisk');
+    if (riskCard) {
+        if (data.risk_events.length > 0) {
+            riskCard.classList.remove('border-0');
+            riskCard.classList.add('border', 'border-danger');
+        } else {
+            riskCard.classList.remove('border', 'border-danger');
+            riskCard.classList.add('border-0');
+        }
+    }
+}
+
 async function loadKPIs(params) {
     const data = await fetchJSON(API.KPIS, params);
+
+    // Reset Growth Indicators
+    document.querySelectorAll('[id$="Growth"]').forEach(el => el.classList.add('d-none'));
+
     if (!data) return;
 
     updateKPI('kpiEvents', data.total_events || 0);
@@ -190,13 +278,46 @@ async function loadKPIs(params) {
     updateKPI('kpiVerified', (data.verified_rate || 0) + '%');
 }
 
+async function loadComparison(params) {
+    const data = await fetchJSON(API.COMPARE, params);
+
+    if (data && data.status === 'disabled') {
+        alert("Please select an Academic Year (e.g., 2024 or 2025) in the filters to enable Comparison Mode.");
+        document.getElementById('compareToggle').checked = false;
+        reloadDashboard();
+        return;
+    }
+
+    if (!data) return;
+
+    const showGrowth = (id, obj) => {
+        updateKPI(id, obj.current);
+        const growthEl = document.getElementById(id + 'Growth');
+        if (growthEl && obj.growth_pct !== null) {
+            growthEl.textContent = `${obj.growth_pct > 0 ? '+' : ''}${obj.growth_pct}% vs Prev`;
+            growthEl.classList.remove('d-none', 'text-danger', 'text-success');
+            growthEl.classList.add(obj.growth_pct >= 0 ? 'text-success' : 'text-danger');
+        }
+    };
+
+    if (data.total_events) showGrowth('kpiEvents', data.total_events);
+    if (data.total_participations) showGrowth('kpiParticipations', data.total_participations);
+    if (data.verified_rate) showGrowth('kpiVerified', data.verified_rate);
+    if (data.total_students) showGrowth('kpiStudents', data.total_students);
+}
+
 function updateKPI(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
 }
 
+function updateText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
 async function loadTableData(params) {
-    params.set('per_page', 500); // Fetch reasonable max for client side table
+    params.set('per_page', 500);
 
     try {
         const data = await fetchJSON(API.LIST, params);
@@ -211,8 +332,8 @@ async function loadTableData(params) {
     } catch (e) { console.error("Table Error", e); }
 }
 
-async function loadCharts(params) {
-    // 1. Activity Breakdown
+async function loadCharts(params, compareMode = false) {
+    // 1. Activity Breakdown (Clickable for Drilldown)
     try {
         const distData = await fetchJSON(API.DIST, params);
         if (Array.isArray(distData) && distData.length > 0) {
@@ -222,6 +343,15 @@ async function loadCharts(params) {
                     data: distData.map(d => d.count),
                     backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796']
                 }]
+            }, {
+                onClick: (e, elements) => {
+                    if (elements && elements.length > 0) {
+                        const idx = elements[0].index;
+                        const label = distData[idx].category;
+                        openDrilldown(label, params);
+                    }
+                },
+                cutout: '60%'
             });
         } else {
             showEmptyState('eventChart');
@@ -280,7 +410,9 @@ async function loadCharts(params) {
                     backgroundColor: ['#1cc88a', '#e74a3b']
                 }]
             }, {
-                cutout: '70%'
+                cutout: '70%',
+                rotation: -90,
+                circumference: 180
             });
         } else {
             showEmptyState('verifyChart');
@@ -292,16 +424,14 @@ function showEmptyState(canvasId) {
     const canvas = document.getElementById(canvasId);
     const overlay = document.getElementById(canvasId + '-empty');
 
-    // Hide Canvas, Show Overlay
     if (canvas) canvas.classList.add('d-none');
     if (overlay) {
         overlay.classList.remove('d-none');
-        overlay.style.display = 'flex'; // Ensure flex
+        overlay.style.display = 'flex';
     }
 }
 
 function renderChart(key, canvasId, type, data, options = {}) {
-    // Reset Visibility (Show Canvas, Hide Overlay)
     const canvas = document.getElementById(canvasId);
     const overlay = document.getElementById(canvasId + '-empty');
 
@@ -334,4 +464,163 @@ function renderChart(key, canvasId, type, data, options = {}) {
             ...options
         }
     });
+}
+
+// ============================================================
+// CHART DOWNLOAD AS PNG
+// ============================================================
+function downloadChart(chartKey, filename) {
+    const chart = charts[chartKey];
+    if (!chart) return;
+
+    const link = document.createElement('a');
+    link.href = chart.toBase64Image();
+    link.download = (filename || chartKey) + '.png';
+    link.click();
+}
+
+// ============================================================
+// DRILLDOWN LOGIC
+// ============================================================
+async function openDrilldown(category, baseParams) {
+    const modal = new bootstrap.Modal(document.getElementById('drilldownModal'));
+    modal.show();
+
+    const content = document.getElementById('drilldownContent');
+    const bread = document.getElementById('drilldownBreadcrumb');
+
+    bread.innerHTML = `<li class="breadcrumb-item"><a href="#" onclick="return false;">Overview</a></li><li class="breadcrumb-item active">${category}</li>`;
+
+    content.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Loading events for ${category}...</p>
+        </div>
+    `;
+
+    const params = new URLSearchParams(baseParams);
+    params.set('category_name', category);
+    params.set('per_page', 1000);
+
+    try {
+        const data = await fetchJSON(API.LIST, params);
+        if (data && data.students && data.students.length > 0) {
+            // Group by Title + Date
+            const eventMap = {};
+            data.students.forEach(s => {
+                const key = s.title + '::' + s.date;
+                if (!eventMap[key]) eventMap[key] = {
+                    title: s.title,
+                    date: s.date,
+                    count: 0,
+                    category: s.category,
+                    verified: 0
+                };
+                eventMap[key].count++;
+                if (s.status === 'faculty_verified' || s.status === 'auto_verified') eventMap[key].verified++;
+            });
+
+            const events = Object.values(eventMap);
+
+            let html = `
+                <table class="table table-hover align-middle">
+                    <thead class="bg-light"><tr><th>Event</th><th>Date</th><th>Participants</th><th>Actions</th></tr></thead>
+                    <tbody>
+            `;
+
+            events.forEach(e => {
+                const safeTitle = e.title.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                html += `
+                    <tr>
+                        <td class="fw-bold text-dark">${e.title}</td>
+                        <td>${e.date}</td>
+                        <td>${e.count} <span class="text-xs text-muted">(${e.verified} Verified)</span></td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary" onclick="drilldownEvent('${safeTitle}', '${e.date}', '${e.category}')">
+                                    <i class="fas fa-sitemap me-1"></i>Depts
+                                </button>
+                                <button class="btn btn-outline-success" onclick="exportEventInstance('${safeTitle}', '${e.date}', '${e.category}')">
+                                    <i class="fas fa-download me-1"></i>Export
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table>`;
+            content.innerHTML = html;
+        } else {
+            content.innerHTML = `<p class="text-center text-muted py-4">No events found.</p>`;
+        }
+    } catch (e) {
+        content.innerHTML = `<p class="text-center text-danger py-4">Error loading data.</p>`;
+    }
+}
+
+async function drilldownEvent(title, date, category) {
+    const content = document.getElementById('drilldownContent');
+    const bread = document.getElementById('drilldownBreadcrumb');
+
+    bread.innerHTML += `<li class="breadcrumb-item active">${title}</li>`;
+    content.innerHTML = `<div class="text-center py-4"><div class="spinner-border"></div></div>`;
+
+    const params = new URLSearchParams();
+    params.set('search', title);
+
+    try {
+        const data = await fetchJSON(API.LIST, params);
+        if (data && data.students) {
+            const deptMap = {};
+            data.students.forEach(s => {
+                if (!deptMap[s.department]) deptMap[s.department] = 0;
+                deptMap[s.department]++;
+            });
+
+            let html = `<h6 class="mb-3 fw-bold">${title} <span class="text-muted fw-normal">(${date})</span></h6>`;
+            html += `<ul class="list-group">`;
+            Object.entries(deptMap).forEach(([d, c]) => {
+                html += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${d}
+                        <span class="badge bg-primary rounded-pill">${c} Students</span>
+                    </li>
+                 `;
+            });
+            html += `</ul>`;
+            content.innerHTML = html;
+        }
+    } catch (e) {
+        content.innerHTML = "Error loading department breakdown.";
+    }
+}
+
+// ============================================================
+// EVENT INSTANCE EXPORT (from Drilldown)
+// ============================================================
+function exportEventInstance(title, date, category) {
+    // Build the event identity string the same way the backend does.
+    // For "defined" events, we'd need the activity_type_id which we don't have client-side.
+    // So we use the search-based filtered export as a practical approach.
+    const params = new URLSearchParams(currentFilters);
+    params.set('search', title);
+
+    const url = `${EXPORT.TABLE}?${params.toString()}`;
+    window.open(url, '_blank');
+}
+
+// ============================================================
+// TABLE EXPORT (Current View)
+// ============================================================
+function exportCurrentTable() {
+    const url = `${EXPORT.TABLE}?${currentFilters.toString()}`;
+    window.open(url, '_blank');
+}
+
+// ============================================================
+// SNAPSHOT EXPORT
+// ============================================================
+function exportSnapshot() {
+    const url = `${EXPORT.SNAPSHOT}?${currentFilters.toString()}`;
+    window.open(url, '_blank');
 }

@@ -1,0 +1,237 @@
+================================================================================
+          NAAC ACCREDITATION INTELLIGENCE DASHBOARD - COMPLETE GUIDE
+================================================================================
+
+URL: /analytics/dashboard
+ACCESS: Admin and Faculty only (login required)
+
+================================================================================
+1. PAGE HEADER
+================================================================================
+
+Title: "NAAC Accreditation Intelligence"
+
+Export Dropdown Button (Top Right):
+  - "Full NAAC Report"   -> Downloads complete 4-sheet Excel (Summary, Events, Depts, Students)
+  - "Student List Only"  -> Downloads only Student Participation sheet
+  - "Event Summary Only" -> Downloads only Event Summary sheet
+  All exports respect currently applied filters.
+
+================================================================================
+2. FILTER BAR
+================================================================================
+
+Location: Top card below header
+
+Controls:
+  - Search Box         -> Filters student table by name, roll number, or activity title
+  - Department Select  -> Filters all data by department (e.g., CSE, ECE)
+  - Status Select      -> Filters by verification status (pending, auto_verified, faculty_verified, rejected)
+  - Batch Input        -> Filters by student batch year
+  - Date Range (From/To) -> Filters activities by start_date range
+
+Buttons:
+  - "Apply Filters"    -> Reloads all KPIs, charts, table, and insights with selected filters
+  - "Reset"            -> Clears all filters and reloads with full data
+
+Toggle:
+  - "Year-over-Year Performance Analysis" (switch)
+    When ON:  KPI cards show current year value + growth % vs previous year
+              Requires a year-based filter to work. If no year selected, shows alert.
+    When OFF: KPI cards show normal totals for the filtered data.
+
+================================================================================
+3. AUDIT & DATA QUALITY STATUS (Collapsible Panel)
+================================================================================
+
+Location: Accordion panel below filter bar. Collapsed by default.
+Click to expand.
+
+Shows 4 metrics (calculated from ALL data, ignoring filters):
+  - Null Dates          -> % of activities missing start_date
+  - Missing Dept        -> % of activities where student has no department
+  - Missing Category    -> Count of activities with no event type AND no custom category
+  - Duplicate Entries   -> Count of same student + same event identity appearing more than once
+
+Purpose: Quick audit check for data integrity before generating NAAC reports.
+
+================================================================================
+4. ADMINISTRATIVE INSIGHTS (4 Cards)
+================================================================================
+
+Location: Row of 4 cards below health panel
+
+Card 1 - Top Performing Dept:
+  Shows department with highest engagement %.
+  Updates based on current filters.
+
+Card 2 - Most Popular Event:
+  Shows event with highest unique student count.
+  Updates based on current filters.
+
+Card 3 - Verification Efficiency:
+  Shows % of activities that are verified (auto + faculty) out of total.
+  Updates based on current filters.
+
+Card 4 - Risk Alerts:
+  Shows count of events where >40% of submissions are still pending.
+  Card border turns RED if count > 0.
+  Updates based on current filters.
+
+================================================================================
+5. KPI CARDS (4 Cards)
+================================================================================
+
+Location: Row of 4 cards below insights
+
+Card 1 - Total Events:
+  Count of unique events (using strict identity: Type-ID-Date or Custom-Title-Date).
+  In comparison mode: shows growth % arrow (green = up, red = down).
+
+Card 2 - Total Participations:
+  Count of all student activity submissions.
+  In comparison mode: shows growth %.
+
+Card 3 - Active Students:
+  Total active students in the system.
+  In comparison mode: shows growth %.
+
+Card 4 - Verified Rate:
+  Percentage of submissions that are verified.
+  In comparison mode: shows growth %.
+
+================================================================================
+6. CHARTS (4 Charts)
+================================================================================
+
+Each chart has a small DOWNLOAD button (arrow icon) in top-right corner.
+Clicking it saves the chart as a PNG image file.
+
+Chart 1 - Activity Breakdown (Doughnut):
+  Shows event count by category (e.g., Workshop, Seminar, Hackathon, Other/Custom).
+  CLICKABLE: Click any wedge to open the Drilldown Modal for that category.
+
+Chart 2 - Yearly Participation Trend (Line):
+  Shows total participations per year.
+  X-axis = Year, Y-axis = Participation count.
+
+Chart 3 - Departmental Engagement (Horizontal Bar):
+  Shows engagement % per department.
+  Engagement = (participated students / total students in dept) * 100.
+
+Chart 4 - Verification Status (Half Doughnut):
+  Shows verified vs not-verified/pending ratio.
+
+================================================================================
+7. STUDENT PARTICIPATION TABLE
+================================================================================
+
+Location: Below charts
+
+Table Columns:
+  1. Student Name       -> Full name of the student
+  2. Department         -> Student's department
+  3. Activity Title     -> Event name + category shown below it
+  4. Status             -> Color-coded badge:
+                           Green  = faculty_verified or auto_verified
+                           Yellow = pending
+                           Red    = rejected
+  5. Date               -> Activity start date
+  6. Certificate        -> "View" button (opens certificate in new tab) OR "Unavailable"
+                           Certificate column only shows View for admin/faculty users.
+                           Raw file paths are never exposed.
+
+Table Features:
+  - Search box (top of table) for quick filtering within loaded results
+  - Pagination
+  - Sortable columns
+  - Responsive layout
+
+Buttons above table:
+  - "Export Table" (green)  -> Downloads Excel with exactly the filtered students currently shown
+                               File includes: metadata header row (filters, timestamp, record count)
+                               + full student data with certificate hash and links
+  - "Snapshot" (blue)       -> Downloads lightweight 3-sheet Excel:
+                               Sheet 1: KPI Snapshot (current filter values)
+                               Sheet 2: Admin Insights (top dept, top event, risk events)
+                               Sheet 3: Year Comparison (if year filter is active, otherwise note)
+
+================================================================================
+8. DRILLDOWN MODAL
+================================================================================
+
+Triggered by: Clicking a wedge on the Activity Breakdown chart.
+
+Shows: List of events in that category with:
+  - Event Title
+  - Date
+  - Participant count (with verified count)
+
+Each event row has 2 buttons:
+  - "Depts" (blue)   -> Expands to show department-wise breakdown of participants
+  - "Export" (green)  -> Downloads Excel with only the students for that specific event
+                         File name: Filtered_Students_YYYYMMDD_HHMM.xlsx
+
+Breadcrumb navigation shows: Overview > Category > Event
+
+================================================================================
+9. BACKEND API ENDPOINTS
+================================================================================
+
+All endpoints require login. Data is scoped by role:
+  - Admin:           sees everything
+  - Faculty (HOD):   sees only their department
+  - Faculty (Incharge): sees only their managed event types
+  - Student:         cannot access analytics dashboard
+
+Data Endpoints:
+  GET /analytics/api/kpis                -> KPI summary (events, participations, students, rate)
+  GET /analytics/api/distribution        -> Event counts by category
+  GET /analytics/api/department-participation -> Engagement % by department
+  GET /analytics/api/yearly-trend        -> Participations per year
+  GET /analytics/api/verification-summary -> Verified vs pending counts
+  GET /analytics/api/student-list        -> Paginated student list (with certificate fields)
+  GET /analytics/api/insights            -> Admin insights (top dept, top event, risks)
+  GET /analytics/api/health              -> Data quality metrics
+  GET /analytics/api/comparison          -> Year-over-Year growth stats
+
+Export Endpoints:
+  GET /analytics/export-naac             -> Full NAAC Excel report (type=full|students|events)
+  GET /analytics/export-students-table   -> Filtered student list Excel
+  GET /analytics/export-snapshot         -> KPI + Insights + Comparison Excel
+  GET /analytics/export-event-instance   -> Event-specific student list Excel
+
+All endpoints accept filter query params: year, department, event_type_id, verified_only,
+batch, start_date, end_date, category_name, search, status.
+
+================================================================================
+10. EXCEL EXPORT DETAILS
+================================================================================
+
+Full NAAC Report (export-naac?type=full):
+  Sheet 1: Institutional_Summary   -> Date, filters, KPIs
+  Sheet 2: Event_Summary           -> Events grouped by identity with participant counts
+  Sheet 3: Department_Summary      -> Department engagement stats
+  Sheet 4: Student_Participation   -> Every student record with:
+           Student Name, Roll No, Department, Batch, Activity Title, Category,
+           Date, Status, Verification Mode, Certificate Hash, Certificate Link
+
+Filtered Student Export (export-students-table):
+  Row 1-2: Metadata (generated timestamp, record count, applied filters)
+  Row 4+:  Student data with same columns as Sheet 4 above
+  Freeze panes on row 5 for easy scrolling
+
+Snapshot Export (export-snapshot):
+  Sheet 1: KPI_Snapshot       -> Single row with all KPI values
+  Sheet 2: Admin_Insights     -> Top dept, top event, risk events
+  Sheet 3: Year_Comparison    -> Growth % table (or note if no year selected)
+
+All exports include:
+  - Bold header rows
+  - Auto-width columns
+  - Certificate Hash for audit verification
+  - Certificate Links (clickable URLs)
+
+================================================================================
+END OF GUIDE
+================================================================================
